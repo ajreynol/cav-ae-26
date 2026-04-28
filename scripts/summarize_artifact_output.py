@@ -20,6 +20,12 @@ TIMING_RE = re.compile(
     r"(?: returncode=(-?[0-9]+))?"
     r"(?: timed_out=(true|false))?"
 )
+PROOF_GEN_METADATA_RE = re.compile(
+    r"\[run_artifact_subset\] proof_gen_elapsed_seconds=([0-9]+(?:\.[0-9]+)?)"
+    r"(?: returncode=(-?[0-9]+))?"
+    r"(?: timed_out=(true|false))?"
+    r"(?: status=([A-Za-z0-9_-]+))?"
+)
 PROOF_SIZE_RE = re.compile(
     r"^(?:finalProof::totalRuleCount|finalProofRuleCount)\s*=\s*(\d+)\s*$",
     re.MULTILINE,
@@ -101,6 +107,27 @@ def parse_ethos_status(path: Path) -> tuple[str, float | None]:
     if re.search(r"(?m)^\s*incomplete\s*$", normalized):
         return "incomplete", elapsed
     return first_nonempty_line(body), elapsed
+
+
+def parse_proof_gen_status(bench_dir: Path) -> tuple[str, float | None]:
+    proof_gen_path = bench_dir / "cvc5-proof-gen.txt"
+    if proof_gen_path.is_file():
+        return parse_cvc5_status(proof_gen_path)
+
+    ethos_check_path = bench_dir / "ethos-check.txt"
+    if not ethos_check_path.is_file():
+        return "cvc5-error", None
+
+    match = PROOF_GEN_METADATA_RE.search(read_text(ethos_check_path))
+    if match is None:
+        return "cvc5-error", None
+
+    elapsed = float(match.group(1))
+    timed_out = match.group(3) == "true" if match.group(3) is not None else False
+    status = match.group(4) or "cvc5-error"
+    if timed_out:
+        return "timeout", elapsed
+    return status, elapsed
 
 
 def parse_proof_size(bench_dir: Path) -> str:
@@ -206,7 +233,7 @@ def main() -> int:
             benchmark_rel = bench_dir.relative_to(output_dir)
             solve_status, solve_time = parse_cvc5_status(bench_dir / "cvc5-solve.txt")
             proof_status, proof_time = parse_cvc5_status(bench_dir / "cvc5-solve-proof.txt")
-            proof_gen_status, proof_gen_time = parse_cvc5_status(bench_dir / "cvc5-proof-gen.txt")
+            proof_gen_status, proof_gen_time = parse_proof_gen_status(bench_dir)
             ethos_status_line, ethos_time = parse_ethos_status(bench_dir / "ethos-check.txt")
             check_status = combine_check_status(proof_gen_status, ethos_status_line)
 

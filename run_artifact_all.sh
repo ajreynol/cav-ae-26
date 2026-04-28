@@ -29,6 +29,7 @@ Options:
   --seed N                    Random seed for benchmark sampling. Default: 0
   -j N, --jobs N              Number of benchmark workers. Default: 1
   --timeout SECONDS           Per-benchmark timeout. Default: 60
+  --delete-proofs             Delete cvc5-proof-gen.txt after the Ethos step.
   --cvc5-binary PATH          Optional cvc5 binary path.
   --ethos-binary PATH         Optional ethos binary path.
   -h, --help                  Show this help message.
@@ -67,6 +68,7 @@ output_dir=""
 seed="0"
 jobs="1"
 timeout_seconds="${DEFAULT_TIMEOUT_SECONDS}"
+delete_proofs="false"
 cvc5_binary=""
 ethos_binary=""
 
@@ -111,6 +113,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { printf 'Missing value for %s\n' "$1" >&2; exit 2; }
       timeout_seconds="$2"
       shift 2
+      ;;
+    --delete-proofs)
+      delete_proofs="true"
+      shift
       ;;
     --cvc5-binary)
       [[ $# -ge 2 ]] || { printf 'Missing value for %s\n' "$1" >&2; exit 2; }
@@ -174,6 +180,9 @@ if [[ -n "${cvc5_binary}" ]]; then
 fi
 if [[ -n "${ethos_binary}" ]]; then
   run_subset_cmd+=("--ethos-binary" "$(resolve_path "${ethos_binary}")")
+fi
+if [[ "${delete_proofs}" == "true" ]]; then
+  run_subset_cmd+=("--delete-proofs")
 fi
 
 summarize_output_cmd=(

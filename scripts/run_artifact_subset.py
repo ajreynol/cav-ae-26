@@ -48,6 +48,7 @@ CVC5_RUNS = [
 ]
 PROOF_START = b"unsat\n(\n"
 PROOF_END = b"\n)\n"
+PROOF_GEN_METADATA_PREFIX = "[run_artifact_subset] proof_gen_"
 
 
 @dataclass
@@ -112,6 +113,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_TIMEOUT_SECONDS,
         help="Per-benchmark timeout in seconds for each cvc5/Ethos invocation.",
+    )
+    parser.add_argument(
+        "--delete-proofs",
+        action="store_true",
+        help="Delete cvc5-proof-gen.txt after the Ethos step finishes.",
     )
     parser.add_argument(
         "--cvc5-binary",
@@ -376,6 +382,16 @@ def format_output_with_metadata(
     return data + b"\n" + footer
 
 
+def format_proof_gen_metadata(
+    elapsed_seconds: float, returncode: int, timed_out: bool, status: str
+) -> str:
+    return (
+        f"{PROOF_GEN_METADATA_PREFIX}elapsed_seconds={elapsed_seconds:.6f} "
+        f"returncode={returncode} timed_out={'true' if timed_out else 'false'} "
+        f"status={status}"
+    )
+
+
 def combine_streams(stdout: bytes, stderr: bytes) -> bytes:
     if not stdout:
         return stderr
@@ -392,10 +408,16 @@ def write_stdout(
     elapsed_seconds: float | None = None,
     returncode: int | None = None,
     timed_out: bool | None = None,
+    extra_metadata_lines: list[str] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if elapsed_seconds is not None and returncode is not None and timed_out is not None:
         data = format_output_with_metadata(data, elapsed_seconds, returncode, timed_out)
+    if extra_metadata_lines:
+        if not data.endswith(b"\n"):
+            data += b"\n"
+        metadata_block = "".join(f"{line}\n" for line in extra_metadata_lines).encode("utf-8")
+        data += metadata_block
     path.write_bytes(data)
 
 
@@ -406,6 +428,12 @@ def first_nonempty_line_bytes(data: bytes) -> str:
         if stripped:
             return stripped
     return ""
+
+
+def cvc5_status_from_output(data: bytes, timed_out: bool) -> str:
+    if timed_out:
+        return "timeout"
+    return "unsat" if first_nonempty_line_bytes(data) == "unsat" else "cvc5-error"
 
 
 def benchmark_output_dir(output_dir: Path, bench_root: Path, bench_path: Path) -> Path:
@@ -472,12 +500,14 @@ def process_benchmark(
     ethos_binary: Path,
     cpc_signature: Path,
     timeout_seconds: float,
+    delete_proofs: bool,
 ) -> tuple[str, list[str]]:
     rel_bench = str(bench.relative_to(bench_root))
     bench_dir = benchmark_output_dir(output_dir, bench_root, bench)
     bench_dir.mkdir(parents=True, exist_ok=True)
 
     issues: list[str] = []
+    proof_gen_metadata_line: str | None = None
     for output_name, extra_args in CVC5_RUNS:
         command = [str(cvc5_binary), *BASE_CVC5_ARGS, *extra_args, str(bench)]
         result = run_command(command, timeout_seconds)
@@ -498,6 +528,13 @@ def process_benchmark(
             returncode=output_returncode,
             timed_out=output_timed_out,
         )
+        if output_name == "cvc5-proof-gen.txt":
+            proof_gen_metadata_line = format_proof_gen_metadata(
+                result.elapsed_seconds,
+                result.returncode,
+                result.timed_out,
+                cvc5_status_from_output(output_data, result.timed_out),
+            )
         first_line = first_nonempty_line_bytes(output_data)
         if result.returncode != 0 or result.timed_out or first_line != "unsat":
             issues.append(
@@ -514,9 +551,14 @@ def process_benchmark(
         elapsed_seconds=ethos_elapsed_seconds,
         returncode=ethos_returncode,
         timed_out=ethos_timed_out,
+        extra_metadata_lines=[
+            proof_gen_metadata_line
+        ] if delete_proofs and proof_gen_metadata_line else None,
     )
     if ethos_issue is not None:
         issues.append(f"{rel_bench}: {ethos_issue}")
+    if delete_proofs:
+        (bench_dir / "cvc5-proof-gen.txt").unlink(missing_ok=True)
 
     return rel_bench, issues
 
@@ -535,6 +577,7 @@ def main() -> int:
     log("[start] Using all benchmarks under the benchmark root")
     log(f"[start] Benchmark workers: {args.jobs}")
     log(f"[start] Per-benchmark timeout: {args.timeout:.1f}s")
+    log(f"[start] Delete proof outputs: {'yes' if args.delete_proofs else 'no'}")
 
     if not args.dry_run:
         log("[setup] Ensuring repo-local cvc5 and ethos builds are available")
@@ -582,6 +625,7 @@ def main() -> int:
                 ethos_binary,
                 cpc_signature,
                 args.timeout,
+                args.delete_proofs,
             )
             log(f"[{index}/{len(benchmarks)}] {rel_bench}")
             issues.extend(bench_issues)
@@ -597,6 +641,7 @@ def main() -> int:
                     ethos_binary,
                     cpc_signature,
                     args.timeout,
+                    args.delete_proofs,
                 ): bench
                 for bench in benchmarks
             }
