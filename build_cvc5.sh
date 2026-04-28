@@ -6,8 +6,8 @@
 # Usage: ./build_cvc5.sh [-jN] [extra configure.sh args]
 #
 # Default configure flags:
-#   - Linux and similar: production --static --static-binary --auto-download
-#   - macOS:             production --static --auto-download
+#   - Linux and similar: production --static --static-binary --auto-download --statistics
+#   - macOS:             production --static --auto-download --statistics
 # -jN sets the parallel build level (default: $(nproc)).
 # Any other arguments are forwarded to cvc5's configure.sh.
 
@@ -26,13 +26,13 @@ for arg in "$@"; do
   esac
 done
 
-CONFIG_ARGS=(production --static --static-binary --auto-download "${EXTRA_ARGS[@]}")
+CONFIG_ARGS=(production --static --static-binary --auto-download --statistics "${EXTRA_ARGS[@]}")
 UNAME_S="$(uname -s)"
 if [ "$UNAME_S" = "Darwin" ]; then
   # macOS does not support fully static system linking for executables in the
   # way Linux does. Keep cvc5 in static-library mode, but do not request
   # --static-binary.
-  CONFIG_ARGS=(production --static --auto-download "${EXTRA_ARGS[@]}")
+  CONFIG_ARGS=(production --static --auto-download --statistics "${EXTRA_ARGS[@]}")
   echo "[build_cvc5] Detected macOS; using --static without --static-binary"
 fi
 

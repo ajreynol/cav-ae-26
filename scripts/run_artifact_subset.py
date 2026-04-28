@@ -6,11 +6,11 @@ from __future__ import annotations
 import argparse
 import os
 import random
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +35,7 @@ PROOF_END = b"\n)\n"
 class CommandResult:
     returncode: int
     timed_out: bool
+    elapsed_seconds: float
     stdout: bytes
     stderr: bytes
 
@@ -77,11 +78,6 @@ def parse_args() -> argparse.Namespace:
         help="Random seed used when sampling benchmarks.",
     )
     parser.add_argument(
-        "--status",
-        default="unsat",
-        help="Comma-separated benchmark statuses to sample from, or 'any'. Default: unsat.",
-    )
-    parser.add_argument(
         "--cvc5-binary",
         type=Path,
         default=None,
@@ -116,15 +112,6 @@ def detect_benchmark_root(explicit: Path | None) -> Path:
     return benchmarks_dir.resolve()
 
 
-def parse_status_filter(raw_status: str) -> set[str] | None:
-    if raw_status.strip().lower() == "any":
-        return None
-    statuses = {part.strip().lower() for part in raw_status.split(",") if part.strip()}
-    if not statuses:
-        raise ValueError("Status filter was empty. Use 'any' or provide one or more statuses.")
-    return statuses
-
-
 def resolve_explicit_binary(explicit: Path | None, tool_name: str) -> Path | None:
     if explicit is not None:
         resolved = explicit.resolve()
@@ -143,10 +130,25 @@ def run_setup_command(command: list[str], description: str) -> None:
         )
 
 
+def cvc5_has_statistics(binary: Path) -> bool:
+    result = subprocess.run(
+        [str(binary), "--show-config"],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    output = result.stdout.decode("utf-8", errors="replace").lower()
+    return "statistics" in output and "yes" in output.partition("statistics")[2][:32]
+
+
 def ensure_default_binaries() -> tuple[Path, Path]:
     cvc5_exists = DEFAULT_CVC5_BINARY.is_file()
     ethos_exists = DEFAULT_ETHOS_BINARY.is_file()
-    if cvc5_exists and ethos_exists:
+    cvc5_stats_ok = cvc5_exists and cvc5_has_statistics(DEFAULT_CVC5_BINARY)
+    if cvc5_exists and ethos_exists and cvc5_stats_ok:
         return DEFAULT_CVC5_BINARY.resolve(), DEFAULT_ETHOS_BINARY.resolve()
 
     missing = []
@@ -154,16 +156,18 @@ def ensure_default_binaries() -> tuple[Path, Path]:
         missing.append("cvc5")
     if not ethos_exists:
         missing.append("ethos")
+    if cvc5_exists and not cvc5_stats_ok:
+        missing.append("cvc5-with-statistics")
     log(f"[setup] Missing repo-local binaries: {', '.join(missing)}")
 
     jobs = os.cpu_count() or 4
     jobs_arg = f"-j{jobs}"
-    if not cvc5_exists and not ethos_exists:
+    if (not cvc5_exists or not cvc5_stats_ok) and not ethos_exists:
         run_setup_command(
             [str((REPO_ROOT / "build_all.sh").resolve()), jobs_arg],
             f"[setup] Building cvc5 and ethos with ./build_all.sh {jobs_arg}",
         )
-    elif not cvc5_exists:
+    elif not cvc5_exists or not cvc5_stats_ok:
         run_setup_command(
             [str((REPO_ROOT / "build_cvc5.sh").resolve()), jobs_arg],
             f"[setup] Building cvc5 with ./build_cvc5.sh {jobs_arg}",
@@ -211,64 +215,19 @@ def read_benchmark_list(list_path: Path, bench_root: Path) -> list[Path]:
     return selected
 
 
-def find_candidates_with_rg(bench_root: Path, statuses: set[str]) -> list[Path] | None:
-    if shutil.which("rg") is None:
-        return None
-    matches: set[Path] = set()
-    for status in statuses:
-        pattern = rf"\(set-info\s+:status\s+{re.escape(status)}\)"
-        result = subprocess.run(
-            ["rg", "-l", "--glob", "*.smt2", pattern, str(bench_root)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if result.returncode not in (0, 1):
-            return None
-        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
-            if line:
-                matches.add(Path(line).resolve())
-    return sorted(matches)
-
-
-def benchmark_has_status(path: Path, statuses: set[str]) -> bool:
-    status_re = re.compile(r"\(set-info\s+:status\s+([^\s\)]+)\)")
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            match = status_re.search(line)
-            if match:
-                return match.group(1).lower() in statuses
-    return False
-
-
 def select_benchmarks(
     bench_root: Path,
     sample_size: int,
     seed: int,
     benchmark_list: Path | None,
-    statuses: set[str] | None,
 ) -> list[Path]:
     if benchmark_list is not None:
         log(f"[benchmarks] Reading benchmark list from {benchmark_list}")
         benchmarks = read_benchmark_list(benchmark_list, bench_root)
         return sorted(benchmarks)
 
-    if statuses is None:
-        log(f"[benchmarks] Scanning all .smt2 benchmarks under {bench_root}")
-        candidates = sorted(path.resolve() for path in bench_root.rglob("*.smt2"))
-    else:
-        log(
-            f"[benchmarks] Selecting benchmarks with declared status in "
-            f"{', '.join(sorted(statuses))} under {bench_root}"
-        )
-        candidates = find_candidates_with_rg(bench_root, statuses)
-        if candidates is None:
-            log("[benchmarks] ripgrep lookup unavailable, falling back to header scan")
-            candidates = []
-            for path in sorted(bench_root.rglob("*.smt2")):
-                if benchmark_has_status(path, statuses):
-                    candidates.append(path.resolve())
-
+    log(f"[benchmarks] Scanning all .smt2 benchmarks under {bench_root}")
+    candidates = sorted(path.resolve() for path in bench_root.rglob("*.smt2"))
     if not candidates:
         raise RuntimeError(f"No benchmarks matched under {bench_root}")
     log(f"[benchmarks] Found {len(candidates)} candidate benchmarks")
@@ -293,6 +252,7 @@ def recreate_output_dir(output_dir: Path) -> None:
 
 
 def run_command(command: list[str]) -> CommandResult:
+    start = time.perf_counter()
     try:
         completed = subprocess.run(
             command,
@@ -305,6 +265,7 @@ def run_command(command: list[str]) -> CommandResult:
         return CommandResult(
             returncode=completed.returncode,
             timed_out=False,
+            elapsed_seconds=time.perf_counter() - start,
             stdout=completed.stdout,
             stderr=completed.stderr,
         )
@@ -312,13 +273,35 @@ def run_command(command: list[str]) -> CommandResult:
         return CommandResult(
             returncode=124,
             timed_out=True,
+            elapsed_seconds=time.perf_counter() - start,
             stdout=exc.stdout or b"",
             stderr=exc.stderr or b"",
         )
 
 
-def write_stdout(path: Path, data: bytes) -> None:
+def format_output_with_timing(data: bytes, elapsed_seconds: float) -> bytes:
+    footer = (
+        f"\n[run_artifact_subset] elapsed_seconds={elapsed_seconds:.6f}\n"
+    ).encode("utf-8")
+    if data.endswith(b"\n"):
+        return data + footer
+    return data + b"\n" + footer
+
+
+def combine_streams(stdout: bytes, stderr: bytes) -> bytes:
+    if not stdout:
+        return stderr
+    if not stderr:
+        return stdout
+    if stdout.endswith(b"\n"):
+        return stdout + stderr
+    return stdout + b"\n" + stderr
+
+
+def write_stdout(path: Path, data: bytes, elapsed_seconds: float | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if elapsed_seconds is not None:
+        data = format_output_with_timing(data, elapsed_seconds)
     path.write_bytes(data)
 
 
@@ -328,6 +311,10 @@ def benchmark_output_dir(output_dir: Path, bench_root: Path, bench_path: Path) -
 
 def extract_ethos_proof(proof_output_path: Path, cpc_signature: Path) -> tuple[bytes | None, str | None]:
     proof_output = proof_output_path.read_bytes()
+    marker = b"\n[run_artifact_subset] elapsed_seconds="
+    marker_index = proof_output.find(marker)
+    if marker_index != -1:
+        proof_output = proof_output[:marker_index]
     if not proof_output.startswith(PROOF_START) or not proof_output.endswith(PROOF_END):
         return None, "failed to extract UNSAT proof from cvc5-proof-gen.txt\n"
     proof_body = proof_output[len(PROOF_START) : -len(PROOF_END)]
@@ -344,11 +331,11 @@ def run_ethos_check(
     bench_dir: Path,
     ethos_binary: Path,
     cpc_signature: Path,
-) -> tuple[bytes, str | None]:
+) -> tuple[bytes, str | None, float]:
     proof_output_path = bench_dir / "cvc5-proof-gen.txt"
     proof_bytes, error_text = extract_ethos_proof(proof_output_path, cpc_signature)
     if proof_bytes is None:
-        return error_text.encode("utf-8"), error_text.strip()
+        return error_text.encode("utf-8"), error_text.strip(), 0.0
 
     with tempfile.NamedTemporaryFile(suffix=".eo", delete=False) as handle:
         temp_path = Path(handle.name)
@@ -365,7 +352,7 @@ def run_ethos_check(
             f"ethos-check.txt rc={result.returncode} "
             f"timeout={result.timed_out} stderr_bytes={len(result.stderr)}"
         )
-    return result.stdout, issue
+    return result.stdout, issue, result.elapsed_seconds
 
 
 def main() -> int:
@@ -373,11 +360,7 @@ def main() -> int:
     log(f"[start] Running artifact subset with sample size {args.sample_size}")
     bench_root = detect_benchmark_root(args.bench_root)
     log(f"[start] Benchmark root: {bench_root}")
-    statuses = parse_status_filter(args.status)
-    if statuses is None:
-        log("[start] Status filter: any")
-    else:
-        log(f"[start] Status filter: {', '.join(sorted(statuses))}")
+    log("[start] Using all benchmarks under the benchmark root")
 
     if not args.dry_run:
         log("[setup] Ensuring repo-local cvc5 and ethos builds are available")
@@ -392,7 +375,6 @@ def main() -> int:
         sample_size=args.sample_size,
         seed=args.seed,
         benchmark_list=args.benchmark_list,
-        statuses=statuses,
     )
 
     if args.dry_run:
@@ -421,15 +403,31 @@ def main() -> int:
         for output_name, extra_args in CVC5_RUNS:
             command = [str(cvc5_binary), *BASE_CVC5_ARGS, *extra_args, str(bench)]
             result = run_command(command)
-            write_stdout(bench_dir / output_name, result.stdout)
+            output_data = result.stdout
+            if output_name == "cvc5-solve-proofs-stats.txt":
+                output_data = combine_streams(result.stdout, result.stderr)
+            output_elapsed_seconds = None
+            if output_name != "cvc5-solve-proofs-stats.txt":
+                output_elapsed_seconds = result.elapsed_seconds
+            write_stdout(
+                bench_dir / output_name,
+                output_data,
+                elapsed_seconds=output_elapsed_seconds,
+            )
             if result.returncode != 0 or result.timed_out or result.stderr:
                 issues.append(
                     f"{rel_bench}: {output_name} rc={result.returncode} "
                     f"timeout={result.timed_out} stderr_bytes={len(result.stderr)}"
                 )
 
-        ethos_output, ethos_issue = run_ethos_check(bench_dir, ethos_binary, cpc_signature)
-        write_stdout(bench_dir / "ethos-check.txt", ethos_output)
+        ethos_output, ethos_issue, ethos_elapsed_seconds = run_ethos_check(
+            bench_dir, ethos_binary, cpc_signature
+        )
+        write_stdout(
+            bench_dir / "ethos-check.txt",
+            ethos_output,
+            elapsed_seconds=ethos_elapsed_seconds,
+        )
         if ethos_issue is not None:
             issues.append(f"{rel_bench}: {ethos_issue}")
 
