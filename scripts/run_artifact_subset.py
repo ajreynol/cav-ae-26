@@ -21,6 +21,24 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_CVC5_BINARY = REPO_ROOT / "cvc5" / "build" / "bin" / "cvc5"
 DEFAULT_ETHOS_BINARY = REPO_ROOT / "ethos" / "build" / "src" / "ethos"
 BASE_CVC5_ARGS = ["--enum-inst", "--safe-mode=safe"]
+BENCHMARK_CATEGORIES = (
+    "QF+UF",
+    "QF+Arith",
+    "QF+BV",
+    "QF+Str",
+    "Q+UF",
+    "Q-UF",
+)
+ARITH_MARKERS = (
+    "LIA",
+    "NIA",
+    "LRA",
+    "NRA",
+    "IDL",
+    "RDL",
+    "LIRA",
+    "NIRA",
+)
 CVC5_RUNS = [
     ("cvc5-solve.txt", []),
     ("cvc5-solve-proof.txt", ["--check-proofs"]),
@@ -51,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "sample_size",
         type=int,
-        help="Number of benchmarks to sample. Use 0 to run all matching benchmarks.",
+        help="Number of benchmarks to sample per category.",
     )
     parser.add_argument(
         "--bench-root",
@@ -215,6 +233,32 @@ def read_benchmark_list(list_path: Path, bench_root: Path) -> list[Path]:
     return selected
 
 
+def has_arith_theory(logic: str) -> bool:
+    return any(marker in logic for marker in ARITH_MARKERS)
+
+
+def has_string_theory(logic: str) -> bool:
+    return "S" in logic and "SET" not in logic
+
+
+def classify_benchmark_category(bench_root: Path, bench_path: Path) -> str:
+    rel_path = bench_path.relative_to(bench_root)
+    logic = rel_path.parts[0] if rel_path.parts else ""
+    if logic.startswith("QF_"):
+        logic = logic[3:]
+        if "BV" in logic:
+            return "QF+BV"
+        if has_string_theory(logic):
+            return "QF+Str"
+        if has_arith_theory(logic):
+            return "QF+Arith"
+        return "QF+UF"
+
+    if logic.startswith("A") or "UF" in logic or "DT" in logic:
+        return "Q+UF"
+    return "Q-UF"
+
+
 def select_benchmarks(
     bench_root: Path,
     sample_size: int,
@@ -232,11 +276,34 @@ def select_benchmarks(
         raise RuntimeError(f"No benchmarks matched under {bench_root}")
     log(f"[benchmarks] Found {len(candidates)} candidate benchmarks")
 
-    if sample_size == 0 or sample_size >= len(candidates):
-        return candidates
+    categorized: dict[str, list[Path]] = {category: [] for category in BENCHMARK_CATEGORIES}
+    for candidate in candidates:
+        categorized[classify_benchmark_category(bench_root, candidate)].append(candidate)
+
+    for category in BENCHMARK_CATEGORIES:
+        log(f"[benchmarks] {category}: {len(categorized[category])} candidates")
+
+    if sample_size == 0:
+        selected: list[Path] = []
+        for category in BENCHMARK_CATEGORIES:
+            selected.extend(categorized[category])
+        return sorted(selected)
+
+    shortages = [
+        f"{category} has only {len(categorized[category])} candidates"
+        for category in BENCHMARK_CATEGORIES
+        if len(categorized[category]) < sample_size
+    ]
+    if shortages:
+        raise RuntimeError(
+            "Not enough benchmarks to sample from every category:\n" + "\n".join(shortages)
+        )
 
     rng = random.Random(seed)
-    return sorted(rng.sample(candidates, sample_size))
+    selected = []
+    for category in BENCHMARK_CATEGORIES:
+        selected.extend(rng.sample(categorized[category], sample_size))
+    return sorted(selected)
 
 
 def recreate_output_dir(output_dir: Path) -> None:
