@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a LaTeX table and optional PDF from an artifact summary CSV."""
+"""Generate a Markdown table from an artifact summary CSV."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,8 +12,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV_PATH = REPO_ROOT / "output" / "summary.csv"
-DEFAULT_TEX_PATH = REPO_ROOT / "output" / "summary-table.tex"
-DEFAULT_PDF_PATH = REPO_ROOT / "output" / "summary-table.pdf"
+DEFAULT_MARKDOWN_PATH = REPO_ROOT / "output" / "summary-table.md"
 CATEGORY_ORDER = (
     "QF+UF",
     "QF+Arith",
@@ -24,7 +21,6 @@ CATEGORY_ORDER = (
     "Q+UF",
     "Q-UF",
 )
-LATEX_ENGINES = ("pdflatex", "xelatex", "lualatex", "tectonic")
 
 
 @dataclass
@@ -56,7 +52,7 @@ class AggregateRow:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a LaTeX summary table from output/summary.csv."
+        description="Generate a Markdown summary table from output/summary.csv."
     )
     parser.add_argument(
         "--csv",
@@ -65,37 +61,15 @@ def parse_args() -> argparse.Namespace:
         help="Input CSV path.",
     )
     parser.add_argument(
-        "--tex",
+        "--markdown",
         type=Path,
-        default=DEFAULT_TEX_PATH,
-        help="Output LaTeX file path.",
+        default=DEFAULT_MARKDOWN_PATH,
+        help="Output Markdown file path.",
     )
     parser.add_argument(
-        "--pdf",
-        type=Path,
-        default=DEFAULT_PDF_PATH,
-        help="Output PDF path.",
-    )
-    parser.add_argument(
-        "--caption",
-        default="Artifact summary by benchmark category.",
-        help="Table caption.",
-    )
-    parser.add_argument(
-        "--label",
-        default="tab:artifact-summary",
-        help="LaTeX label for the table.",
-    )
-    parser.add_argument(
-        "--engine",
-        choices=LATEX_ENGINES,
-        default=None,
-        help="LaTeX engine to use. Defaults to the first available engine.",
-    )
-    parser.add_argument(
-        "--tex-only",
-        action="store_true",
-        help="Only write the .tex file and skip PDF compilation.",
+        "--title",
+        default="Artifact summary by benchmark category",
+        help="Heading to place above the Markdown table.",
     )
     return parser.parse_args()
 
@@ -233,18 +207,10 @@ def format_size(value: float | None) -> str:
     return f"{value:.1f}"
 
 
-def latex_escape(text: str) -> str:
+def markdown_escape(text: str) -> str:
     replacements = {
-        "\\": r"\textbackslash{}",
-        "&": r"\&",
-        "%": r"\%",
-        "$": r"\$",
-        "#": r"\#",
-        "_": r"\_",
-        "{": r"\{",
-        "}": r"\}",
-        "~": r"\textasciitilde{}",
-        "^": r"\textasciicircum{}",
+        "\\": r"\\",
+        "|": r"\|",
     }
     return "".join(replacements.get(char, char) for char in text)
 
@@ -265,120 +231,40 @@ def build_table_rows(results: list[BenchmarkResult]) -> list[AggregateRow]:
     return rows
 
 
-def render_latex_table(rows: list[AggregateRow], caption: str, label: str) -> str:
-    data_lines = []
+def render_markdown_table(rows: list[AggregateRow], title: str) -> str:
+    lines = [
+        f"# {title}",
+        "",
+        "| Category | # runs | Solve # / time | +Proof # / time | Ratio | +Check # / time | Ratio | Size |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
     for row in rows[:-1]:
-        data_lines.append(render_table_line(row))
-    overall_line = render_table_line(rows[-1])
-    body = "\n".join(data_lines)
-
-    return f"""\\documentclass{{article}}
-\\usepackage[margin=1in]{{geometry}}
-\\usepackage{{booktabs}}
-\\begin{{document}}
-\\begin{{table}}[t]
-\\centering
-\\small
-\\setlength{{\\tabcolsep}}{{4pt}}
-\\begin{{tabular}}{{lrrrrrrr}}
-\\toprule
-Category & \\# runs & Solve \\# / time & +Proof \\# / time & Ratio & +Check \\# / time & Ratio & Size \\\\
-\\midrule
-{body}
-\\midrule
-{overall_line}
-\\bottomrule
-\\end{{tabular}}
-\\caption{{{latex_escape(caption)}}}
-\\label{{{latex_escape(label)}}}
-\\end{{table}}
-\\end{{document}}
-"""
+        lines.append(render_table_line(row))
+    lines.append(render_table_line(rows[-1], overall=True))
+    lines.append("")
+    return "\n".join(lines)
 
 
-def render_table_line(row: AggregateRow) -> str:
+def render_table_line(row: AggregateRow, overall: bool = False) -> str:
+    label = markdown_escape(row.label)
+    if overall:
+        label = f"**{label}**"
     return (
-        f"{latex_escape(row.label)} & "
-        f"{row.runs} & "
-        f"{format_count_time(row.solve_successes, row.solve_time_total)} & "
-        f"{format_count_time(row.proof_successes, row.proof_time_total)} & "
-        f"{format_ratio(row.proof_ratio)} & "
-        f"{format_count_time(row.check_successes, row.check_time_total)} & "
-        f"{format_ratio(row.check_ratio)} & "
-        f"{format_size(row.average_proof_size)} \\\\"
+        f"| {label} | "
+        f"{row.runs} | "
+        f"{format_count_time(row.solve_successes, row.solve_time_total)} | "
+        f"{format_count_time(row.proof_successes, row.proof_time_total)} | "
+        f"{format_ratio(row.proof_ratio)} | "
+        f"{format_count_time(row.check_successes, row.check_time_total)} | "
+        f"{format_ratio(row.check_ratio)} | "
+        f"{format_size(row.average_proof_size)} |"
     )
-
-
-def detect_latex_engine(requested: str | None) -> str | None:
-    if requested is not None:
-        return shutil.which(requested)
-    for engine in LATEX_ENGINES:
-        resolved = shutil.which(engine)
-        if resolved is not None:
-            return resolved
-    return None
-
-
-def compile_pdf(tex_path: Path, pdf_path: Path, engine: str | None) -> None:
-    resolved_engine = detect_latex_engine(engine)
-    if resolved_engine is None:
-        engine_list = ", ".join(LATEX_ENGINES)
-        raise RuntimeError(
-            "Could not find a LaTeX engine on PATH. "
-            f"Tried: {engine_list}. The .tex file was still generated at {tex_path}."
-        )
-
-    tex_path = tex_path.resolve()
-    pdf_path = pdf_path.resolve()
-    tex_path.parent.mkdir(parents=True, exist_ok=True)
-    pdf_path.parent.mkdir(parents=True, exist_ok=True)
-
-    engine_name = Path(resolved_engine).name
-    if engine_name == "tectonic":
-        command = [
-            resolved_engine,
-            "--keep-logs",
-            "--outdir",
-            str(pdf_path.parent),
-            str(tex_path),
-        ]
-    else:
-        command = [
-            resolved_engine,
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            "-output-directory",
-            str(pdf_path.parent),
-            str(tex_path),
-        ]
-
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-        text=True,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"LaTeX compilation failed with {engine_name}:\n{completed.stdout}"
-        )
-
-    generated_pdf = pdf_path.parent / f"{tex_path.stem}.pdf"
-    if not generated_pdf.is_file():
-        raise RuntimeError(
-            f"LaTeX compilation completed but did not produce {generated_pdf}"
-        )
-    if generated_pdf != pdf_path:
-        shutil.copyfile(generated_pdf, pdf_path)
 
 
 def main() -> int:
     args = parse_args()
     csv_path = args.csv.resolve()
-    tex_path = args.tex.resolve()
-    pdf_path = args.pdf.resolve()
+    markdown_path = args.markdown.resolve()
 
     if not csv_path.is_file():
         print(f"CSV file not found: {csv_path}", file=sys.stderr)
@@ -390,21 +276,10 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    tex_path.parent.mkdir(parents=True, exist_ok=True)
-    latex = render_latex_table(build_table_rows(results), args.caption, args.label)
-    tex_path.write_text(latex, encoding="utf-8")
-    print(f"Wrote LaTeX table to {tex_path}")
-
-    if args.tex_only:
-        return 0
-
-    try:
-        compile_pdf(tex_path, pdf_path, args.engine)
-    except RuntimeError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-
-    print(f"Wrote PDF table to {pdf_path}")
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown = render_markdown_table(build_table_rows(results), args.title)
+    markdown_path.write_text(markdown, encoding="utf-8")
+    print(f"Wrote Markdown table to {markdown_path}")
     return 0
 
 
