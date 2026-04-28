@@ -10,7 +10,7 @@ DEFAULT_TIMEOUT_SECONDS="60"
 
 usage() {
   cat <<'EOF'
-Usage: ./run_artifact_all.sh N [options]
+Usage: ./run_artifact_subset.sh N [options]
 
 Run the full artifact workflow:
 1. run_artifact_subset.py
