@@ -1,0 +1,13 @@
+(declare-const a Bool)
+(declare-const or (-> Bool Bool Bool) :right-assoc-nil false)
+
+
+(assume @p0 false)
+
+
+(declare-rule id ((B Bool)) :premises (B) :conclusion (eo::cons or false B))
+(declare-rule concatOr ((A Bool) (B Bool)) :premises (A B) :conclusion (eo::list_concat or A B))
+
+(step @p1 (or false) :rule id :premises (@p0))
+
+(step @p2 false :rule concatOr :premises (@p0 @p0))

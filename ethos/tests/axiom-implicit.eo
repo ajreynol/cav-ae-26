@@ -1,0 +1,9 @@
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+(declare-rule refl ((T Type) (t T))
+    :args (t)
+    :conclusion (= t t)
+)
+
+(declare-const a Bool)
+
+(step @p0 (= a a) :rule refl :args (a))

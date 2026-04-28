@@ -1,0 +1,67 @@
+
+(declare-const Int Type)
+(declare-const Real Type)
+(declare-const BitVec (-> Int Type))
+(declare-const String Type)
+(declare-const Seq (-> Type Type))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(declare-const and
+(->
+    Bool
+    Bool
+    Bool
+) :right-assoc-nil true)
+
+
+(declare-const and2
+(->
+    Bool
+    Bool
+    Bool
+) :right-assoc-nil true)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(declare-parameterized-const bvand ((m Int))
+(-> (BitVec m)
+    (BitVec m)
+    (BitVec m))
+:right-assoc-nil (eo::not (eo::to_bin m 0)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(program arith_typeunion_nary ()
+    :signature (Type Type) Type
+    (
+      ((arith_typeunion_nary Int Real) Real)
+      ((arith_typeunion_nary Int Int) Int)
+      ((arith_typeunion_nary Real Real) Real)
+      ((arith_typeunion_nary Real Int) Real)
+    )
+)
+
+(declare-parameterized-const + ((T Type :implicit) (U Type :implicit)) (-> T
+    U
+    (arith_typeunion_nary T U)) :right-assoc-nil 0)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(program is_string_type ((U Type))
+    :signature (Type) Bool
+    (
+      ((is_string_type String) true)
+      ((is_string_type (Seq U)) true)
+      ((is_string_type U) false)
+    )
+)
+(declare-parameterized-const seq.empty ((T Type)) (-> T))
+(define mk_emptystr ((U Type))
+  (eo::ite (eo::is_eq U String) "" (seq.empty U)))
+
+(declare-parameterized-const str.++ ((T Type))
+  (-> (Seq T) (Seq T) (Seq T)) :right-assoc-nil (mk_emptystr T))
+
+

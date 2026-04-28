@@ -1,0 +1,65 @@
+(declare-const Int Type)
+(declare-consts <numeral> Int)
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+(declare-const + (-> Int Int Int))
+(declare-const - (-> Int Int Int))
+(declare-const < (-> Int Int Bool))
+(declare-const <= (-> Int Int Bool))
+
+(program arith.eval ((S Type) (a Int) (b Int) (z S))
+    :signature (S) S
+    (
+      ((arith.eval (= a b))  (eo::is_eq (arith.eval a) (arith.eval b)))
+      ((arith.eval (< a b))  (eo::is_neg (arith.eval (- a b))))
+      ((arith.eval (<= a b)) (eo::define ((x (arith.eval (- a b)))) 
+                                 (eo::or (eo::is_neg x) (eo::is_eq x 0))))
+      ((arith.eval (+ a b))  (eo::add (arith.eval a) (arith.eval b)))
+      ((arith.eval (- a b))  (eo::add (arith.eval a) (eo::neg (arith.eval b))))
+      ((arith.eval z)        z)
+    )
+)
+
+(declare-const BitVec 
+  (-> Int Type))
+
+(declare-consts <binary> (BitVec (eo::len eo::self)))
+
+(declare-parameterized-const bvadd ((n Int :implicit)) (-> (BitVec n) (BitVec n)
+  (BitVec n)))
+
+(declare-parameterized-const bvextract ((n Int :implicit) (h Int) (l Int)) 
+  (-> (BitVec n)
+    (eo::requires (arith.eval (<= 0 h)) true
+    (eo::requires (arith.eval (< h n)) true
+    (eo::requires (arith.eval (<= 0 l)) true
+    (eo::requires (arith.eval (< l h)) true
+      (BitVec (arith.eval (+ (- h l) 1))))))))
+)
+
+(declare-parameterized-const bvconcat ((n Int :implicit) (m Int :implicit)) 
+  (-> (BitVec n) (BitVec m) (BitVec (arith.eval (+ n m)))))
+
+(program bv.eval ((T Type) (U Type) (S Type) (n Int) (a (BitVec n)) (b (BitVec n)) (z S) (h Int) (l Int))
+    :signature (S) S
+    (
+      ((bv.eval (= a b))           (eo::is_eq (bv.eval a) (bv.eval b)))
+      ((bv.eval (bvadd a b))       (eo::add (bv.eval a) (bv.eval b)))
+      ((bv.eval (bvconcat a b))    (eo::concat (bv.eval a) (bv.eval b)))
+      ((bv.eval (bvextract h l a)) (eo::extract (bv.eval a) l h)) ; note swap l/h
+      ((bv.eval z)                 z)
+    )
+)
+
+(declare-rule eval
+   ((T Type) (U Type) (a T) (b U))
+   :premises ()
+   :args (a b)
+   :requires (((bv.eval a) (bv.eval b)))
+   :conclusion (= a b)
+)
+
+(declare-const x (BitVec 3))
+
+(step a2 (= #b0010 (bvextract 3 0 #b11010010)) :rule eval :premises (#b0010 (bvextract 3 0 #b11010010)))
+(step a3 (= #b000 (bvadd #b111 #b001)) :rule eval :premises (#b000 (bvadd #b111 #b001)))

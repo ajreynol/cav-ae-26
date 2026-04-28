@@ -1,0 +1,4 @@
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+
+(define d () (= true false) :type Bool)

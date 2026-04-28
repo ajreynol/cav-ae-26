@@ -1,0 +1,8 @@
+(declare-const Nat Type)
+
+(declare-consts <numeral> (eo::requires (eo::is_neg eo::self) false Nat))
+
+(declare-const f (-> Nat Bool))
+
+(assume @p0 (f 0))
+;(assume @p0 (f (eo::neg 1)))

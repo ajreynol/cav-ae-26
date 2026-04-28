@@ -1,0 +1,10 @@
+(declare-const Int Type)
+(declare-const - (-> Int Int Int))
+; bound after above
+(declare-const - (-> Int Int))
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+(declare-const a Int)
+(declare-consts <numeral> Int)
+
+(assume @p0 (= (- a) (- 0 a)))

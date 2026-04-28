@@ -1,0 +1,5 @@
+
+(declare-parameterized-const = ((T Type)) (-> T T Bool))
+
+(declare-const not (-> Bool Bool))
+

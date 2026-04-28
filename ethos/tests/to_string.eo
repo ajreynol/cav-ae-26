@@ -1,0 +1,28 @@
+; This file checks the remaining eo::to_str behavior on numerals and strings,
+; and that other literal kinds remain unevaluated.
+
+(declare-const Real Type)
+(declare-consts <rational> Real)
+(declare-const BitVec Type)
+(declare-consts <binary> BitVec)
+(declare-const String Type)
+(declare-consts <string> String)
+
+(declare-parameterized-const ok ((T Type :implicit)) (-> T Bool))
+
+(declare-rule test_to_str ((T Type) (x T) (s String))
+  :args (x s)
+  :requires (((eo::to_str x) s))
+  :conclusion (ok x))
+
+(step @p1 (ok 65) :rule test_to_str :args (65 "A"))
+(step @p2 (ok "abc") :rule test_to_str :args ("abc" "abc"))
+
+(declare-const test_q
+  (eo::requires (eo::is_ok (eo::to_str 2/12)) false Bool))
+(declare-const test_bin
+  (eo::requires (eo::is_ok (eo::to_str #b001)) false Bool))
+(declare-const test_invalid_neg
+  (eo::requires (eo::is_ok (eo::to_str -1)) false Bool))
+(declare-const test_invalid_large
+  (eo::requires (eo::is_ok (eo::to_str 200000)) false Bool))

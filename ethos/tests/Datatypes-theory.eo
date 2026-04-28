@@ -1,0 +1,11 @@
+(include "Nary.eo")
+(include "Arith-theory.eo")
+
+(declare-const UnitTuple Type)
+(declare-const Tuple (-> Type Type Type) :right-assoc-nil UnitTuple)
+
+(declare-const tuple.unit UnitTuple)
+(declare-parameterized-const tuple ((T Type :implicit) (U Type :implicit)) (-> T U (eo::cons Tuple T U)) :right-assoc-nil tuple.unit)
+(declare-parameterized-const tuple.select ((T Type :implicit) (i Int)) (-> T (eo::extract Tuple T i)))
+(declare-parameterized-const tuple.update ((T Type :implicit) (S Type :implicit)) (-> Int T S T))
+(declare-parameterized-const is-tuple ((T Type :implicit)) (-> T Bool))

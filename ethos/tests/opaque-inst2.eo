@@ -1,0 +1,34 @@
+
+
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+
+(declare-const or (-> Bool Bool Bool) :right-assoc-nil false)
+(declare-const and (-> Bool Bool Bool) :right-assoc-nil true)
+(declare-const not (-> Bool Bool))
+
+(declare-const Array (-> Type Type Type))
+(declare-const Int Type)
+
+(declare-const select (-> (Array Int Int) Int Int))
+
+
+(declare-parameterized-const @array_deq_diff
+  ((T Type :implicit) (U Type :implicit) (a (Array T U) :opaque) (b (Array T U) :opaque))
+  T
+)
+
+
+(declare-rule array-ext
+   ((a (Array Int Int)) (b (Array Int Int)))
+   :premises ((not (= a b)))
+   :args ()
+   :conclusion (not (= (select a (@array_deq_diff a b)) (select b (@array_deq_diff a b))))
+)
+
+(declare-const n (Array Int Int))
+(declare-const m (Array Int Int))
+(declare-const v Int)
+
+(assume a1 (not (= n m)))
+(step a2 (not (= (select n (@array_deq_diff n m)) (select m (@array_deq_diff n m)))) :rule array-ext :premises (a1))

@@ -1,0 +1,16 @@
+(declare-const @List Type)
+(declare-const @list.nil @List)
+(declare-parameterized-const @list.cons ((T Type :implicit)) (-> T @List @List) :right-assoc-nil @list.nil)
+
+(declare-const Int Type)
+(declare-const P (-> Int Bool))
+(declare-const forall (-> @List Bool Bool) :binder @list.cons)
+(declare-rule id ((y Bool)) :premises (y) :conclusion y)
+
+(define x () (eo::var "x" Int))
+(define Q () (P x))
+
+(assume @p0 (forall ((x Int)) Q))
+(step @p1 (forall ((x Int)) (P x)) :rule id :premises (@p0))
+
+

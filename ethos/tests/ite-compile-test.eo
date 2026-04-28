@@ -1,0 +1,44 @@
+(declare-const Int Type)
+(declare-consts <numeral> Int)
+(declare-const + (-> Int Int Int))
+(declare-const - (-> Int Int Int))
+(declare-const = (-> Int Int Bool))
+
+(program check_pos ((x Int))
+  :signature (Int) Int
+  (
+    ((check_pos x) (eo::ite (eo::is_neg x) (- x 1) (+ x 1)))
+  )
+)
+
+(program check_sign ((x Int))
+  :signature (Int) Int
+  (
+    ((check_sign x) (eo::ite (eo::is_eq x 0) x (eo::ite (eo::is_neg x) (- x 1) (+ x 1))))
+  )
+)
+
+(program factorial ((x Int))
+  :signature (Int) Int
+  (
+    ((factorial x) (eo::ite (eo::is_eq x 0) 1 (eo::mul x (factorial (eo::add x (eo::neg 1))))))
+  )
+)
+
+(declare-const f (-> Int Int))
+
+
+(declare-rule eval_factorial ((x Int))
+  :args (x)
+  :conclusion (= (f x) (factorial x)))
+  
+(step @p0 (= (f 4) 24) :rule eval_factorial :args (4))
+
+
+(declare-const e (-> Int Int))
+
+(declare-rule eval_check_sign ((x Int))
+  :args (x)
+  :conclusion (= (e x) (check_sign x)))
+  
+(step @p1 (= (e 2) (+ 2 1)) :rule eval_check_sign :args (2))

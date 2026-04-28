@@ -1,0 +1,10 @@
+(declare-const String Type)
+(declare-const Int Type)
+
+(declare-parameterized-const @strings_stoi_result ((s String :opaque)) (-> Int Int))
+
+(declare-const P (-> Int Bool))
+(declare-const s String)
+(declare-const n Int)
+
+(assume @p0 (P (@strings_stoi_result s n)))

@@ -1,0 +1,19 @@
+
+(declare-parameterized-const = ((T Type)) (-> T T Bool))
+
+(declare-const not (-> Bool Bool))
+
+
+(declare-const U Type)
+(define f_true ((x U)) true)
+
+
+(declare-rule trust ((f Bool))
+   :premises ()
+   :args (f)
+   :conclusion f
+)
+
+(declare-const a U)
+
+(step a1 true :rule trust :args ((f_true a)))

@@ -1,0 +1,43 @@
+(include "Utils.eo")
+
+; Bool is builtin
+;(declare-type Bool ())
+
+(declare-parameterized-const ite ((A Type :implicit)) (-> Bool A A A))
+(declare-const not (-> Bool Bool))
+
+(declare-const or (-> Bool Bool Bool)
+   :right-assoc-nil false
+)
+(declare-const and (-> Bool Bool Bool)
+   :right-assoc-nil true
+)
+(declare-const => (-> Bool Bool Bool)
+   :right-assoc
+)
+(declare-const xor (-> Bool Bool Bool)
+   :left-assoc
+)
+
+(declare-parameterized-const = ((A Type :implicit)) (-> A A Bool) :chainable and
+)
+
+(declare-parameterized-const lambda ((A Type :implicit) (B Type :implicit)) (-> A B (-> A B)))
+
+(declare-parameterized-const distinct ((A Type :implicit)) (-> A A Bool) :pairwise and)
+
+;;;;;;;;;;;;;;;;;;
+
+
+; generic variables
+; NOTE: does not check that U is a numeral
+(declare-parameterized-const const ((U Type :implicit) (u U) (T Type)) T)
+
+(declare-parameterized-const skolem ((A Type :implicit)) (-> A A))
+
+; We construct all skolems by wrapping them in an application of `skolem`.
+; The argument is either
+; (1) an application of an internal function symbol @k.ID where ID is the
+; skolem function id,
+; (2) a term t, in the case of purify skolems, where t is the term.
+

@@ -1,0 +1,26 @@
+(declare-const Int Type)
+(declare-consts <numeral> Int)
+(declare-const FiniteField (-> Int Type))
+
+(declare-parameterized-const ff.value ((p Int)) (-> Int (FiniteField p)))
+
+(declare-parameterized-const ff.add ((p Int :implicit))
+    (-> (FiniteField p) (FiniteField p) (FiniteField p)) 
+    :right-assoc-nil (ff.value p 0)
+)
+
+(declare-const c (_ FiniteField 17))
+
+(declare-parameterized-const eq ((T Type :implicit)) (-> T T Bool))
+
+(program f_eq_args ((U Type) (f (-> U U U)) (a U) (b U :list))
+  :signature (U) U
+  (
+    ((f_eq_args (f a (f a b))) a)
+  )
+)
+(declare-rule get_eq_args ((U Type) (t U))
+  :args (t)
+  :conclusion (eq (f_eq_args t) t))
+
+(step @p0 (eq c (ff.add c c)) :rule get_eq_args :args ((ff.add c c)))

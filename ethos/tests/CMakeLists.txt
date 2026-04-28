@@ -1,0 +1,205 @@
+set(ethos_test_file_list
+    Bools.eo
+    literals.eo
+    simple-pf2.eo
+    simple.eo
+    bv-dep-type.eo
+    quoted.eo
+    simple-pf-implicit.eo
+    requires.eo
+    simple-pf.eo
+    evaluate.eo
+    simple-include.eo
+    simple-program.eo
+    generic-swap.eo
+    or-list.eo
+    or-list-null-term.eo
+    or-repl-all.eo
+    or-repl-all-basic.eo
+    constant-eval.eo
+    constant-eval-args.eo
+    chainable.eo
+    substitution.eo
+    pf-substitution.eo
+    substitution-binary-only.eo
+    beta-reduce-define-fun.eo
+    define-const-simple.eo
+    naive-nary.eo
+    sig-replAll.eo
+    pf-sig-replAll.eo
+    simple-sig.eo
+    pf-simple-sig.eo
+    simple-sig-2.eo
+    pf-simple-sig-2.eo
+    not_and.eo
+    scopes.eo
+    substitution-over-or.eo
+    pf-substitution-over-or.eo
+    pf-substitution-large.eo
+    pairwise.eo
+    overloading.eo
+    evaluation.eo
+    bv-concat.eo
+    mixed-arith.eo
+    eval-inc.eo
+    arith-eval.eo
+    pf-arith-eval.eo
+    datatype-simple.eo
+    quant.eo
+    pf-quant.eo
+    bv-type-strict.eo
+    bv-literals.eo
+    bv-eval.eo
+    pf-haniel.eo
+    premise-list-cong.eo
+    premise-list-nary-cong.eo
+    arith-rules-test.eo
+    define-fun-dep-type.eo
+    nat-type.eo
+    use-match.eo
+    match-simple.eo
+    and-intro-old.eo
+    strings-rules-test.eo
+    ite-compile-test.eo
+    theory-rewrite-native.eo
+    par-dt.eo
+    right-assoc-variants.eo
+    rare-example.eo
+    define-fun.alfc.eo
+    quant-sk-small.alfc.eo
+    Arith-rules.eo
+    Arith-theory.eo
+    Booleans-rules.eo
+    Builtin-rules.eo
+    Builtin-theory.eo
+    Nary.eo
+    Quantifiers-rules.eo
+    Quantifiers-theory.eo
+    Uf-rules.eo
+    Utils.eo
+    examples-booleans.eo
+    examples-nary.eo
+    premise-list-cong-2.eo
+    premise-list-nary-cong-2.eo
+    simple_uf.eo
+    Strings-theory.eo
+    Strings-programs.eo
+    self-requires.eo
+    bv-extract.eo
+    Sets-theory.eo
+    Datatypes-theory.eo
+    str-eval.eo
+    define-sort-iarray.eo
+    axiom-implicit.eo
+    match-variants.eo
+    arity-overload.eo
+    binder-ex.eo
+    typeof.eo
+    binder-subterm-share.eo
+    or-concat-false.eo
+    emptylist.eo
+    premise-list-empty.eo
+    overloading-as.eo
+    conclusion-spec.eo
+    var-binders-syntax.eo
+    to_string.eo
+    nground-nil-v3.eo
+    ff-nil.eo
+    or-variant.eo
+    substitution-opaque.eo
+    opaque-inst.eo
+    opaque-inst2.eo
+    mutual-rec.eo
+    push-pop.eo
+    bv-extract-smt3.eo
+    distinct_value_testers.eo
+    gt_eval.eo
+    let-binder-ex.eo
+    skolemize-v1.eo
+    skolemize-v2.eo
+    overloading-arith.eo
+    overloading-binder.eo
+    sorry.eo
+    disamb-arith.eo
+    opaque-inline.eo
+    implicit-then-var.eo
+    is_eq.eo
+    simple-reference.eo
+    simple-quant-reference.eo
+    simple-lra-reference.eo
+    left-cons.eo
+    overload-standalone.eo
+    datatypes-split-rule.eo
+    singular-datatype.eo
+    simul-overload.eo
+    bang-lex.eo
+    segfault-98.eo
+    eo-add-non-first-class.eo
+    unstuck-eval-bv-example.eo
+    param-dt-parse.eo
+    param-dt-parse-amb-fun.eo
+    datatypes-split-rule-param.eo
+    datatypes-split-rule-param-uinst.eo
+    overload-define.eo
+    nested-requires.eo
+    pairwise-singleton.eo
+    quote-opaque.eo
+    quote-requires.eo
+    set-empty-amb.eo
+    const-array.eo
+    type-var-exists.eo
+    array-ext-implicit-type-infer.eo
+    define-scope-attr.eo
+    is-eq-tests.eo
+    eo-arg-ex.eo
+    list-ops-new.eo
+    double-list.eo
+    list-param-immediate.eo
+    eo-definitions-test.eo
+    conclusion-explicit-cases.eo
+    rule-all-cases.eo
+    nground-nil-ex.eo
+    list-nth-non-list.eo
+    eo-list-ops.eo
+    eo-list-ops-napply.eo
+    curry-nary.eo
+    arg-list-cong.eo
+    arg-list-distinct-elim.eo
+    or-no-desugar.eo
+    further-notes-attr.eo
+    list-non-singleton.eo
+    list-non-singleton-left.eo
+    code-point-oob.eo
+    homogeneous-list-ops.eo
+    quant-sk-type.eo
+)
+
+macro(ethos_test file)
+  add_test(
+    NAME ${file}
+    COMMAND $<TARGET_FILE:ethos> ${CMAKE_CURRENT_LIST_DIR}/${file}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  set_tests_properties(${file} PROPERTIES TIMEOUT 40)
+endmacro()
+
+macro(ethos_fail_test file regex)
+  add_test(
+    NAME ${file}
+    COMMAND
+      ${CMAKE_COMMAND}
+      "-DTEST_BINARY=$<TARGET_FILE:ethos>"
+      "-DTEST_FILE=${CMAKE_CURRENT_LIST_DIR}/${file}"
+      "-DTEST_WORKDIR=${CMAKE_SOURCE_DIR}"
+      "-DEXPECT_REGEX=${regex}"
+      -P ${CMAKE_CURRENT_LIST_DIR}/expect_error.cmake
+  )
+  set_tests_properties(${file} PROPERTIES TIMEOUT 40)
+endmacro()
+
+foreach(file ${ethos_test_file_list})
+  ethos_test(${file})
+endforeach()
+
+ethos_fail_test(parser-overflow-declare-sort.eo
+                "Numerals must fit into 32-bit unsigned integers")

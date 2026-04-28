@@ -1,0 +1,45 @@
+
+
+(declare-const Int Type)
+(declare-consts <numeral> Int)
+
+; forward declaration
+(program is-odd () :signature (Int) Bool)
+
+(program is-even ((n Int))
+  :signature (Int) Bool
+  (
+  ((is-even 0) true)
+  ((is-even 1) false)
+  ((is-even n) (is-odd (eo::add n -1)))
+  )
+)
+
+(program is-odd ((n Int))
+  :signature (Int) Bool
+  (
+  ((is-odd 0) false)
+  ((is-odd 1) true)
+  ((is-odd n) (is-even (eo::add n -1)))
+  )
+)
+
+(declare-const not (-> Bool Bool))
+(declare-const pred_is_even (-> Int Bool))
+
+(declare-rule find_is_even ((n Int))
+   :args (n)
+   :requires (((is-even n) true))
+   :conclusion (pred_is_even n)
+)
+
+(declare-rule find_is_odd ((n Int))
+   :args (n)
+   :requires (((is-odd n) true))
+   :conclusion (not (pred_is_even n))
+)
+
+
+(step a1 (pred_is_even 4) :rule find_is_even :premises () :args (4))
+(step a2 (not (pred_is_even 3)) :rule find_is_odd :premises () :args (3))
+

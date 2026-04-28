@@ -1,0 +1,12 @@
+(include "Utils.eo")
+
+(declare-const forall (-> @List Bool Bool))
+
+(declare-const exists (-> @List Bool Bool))
+
+(declare-parameterized-const witness ((T Type :implicit)) (-> T Bool T))
+
+
+; maybe just change to lists
+
+(declare-parameterized-const @k.QUANTIFIERS_SKOLEMIZE ((T Type :implicit)) (-> Bool T T))

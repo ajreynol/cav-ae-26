@@ -1,0 +1,24 @@
+(declare-const Int Type)
+(declare-const a Int)
+(declare-const b Int)
+(declare-const P (-> Int Bool))
+(declare-const f (-> Int Int))
+; Legal match terms:
+(program test1 ((x Int) (y Int))
+  :signature (Int) Int
+  (
+  ((test1 a) a)
+  ((test1 b) b)
+  ((test1 (f (f a))) a)
+  ((test1 y) a)
+  )
+)
+(program test2 ((F Bool) (x Int))
+  :signature (Bool) Int
+  (
+  ((test2 (P x)) x)
+  )
+)
+
+(define test3 ((F Bool))
+    (f (test2 F)))

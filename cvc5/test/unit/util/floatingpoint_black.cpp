@@ -1,0 +1,181 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * Black box testing of cvc5::FloatingPoint.
+ */
+
+#include "base/check.h"
+#include "test.h"
+#include "util/floatingpoint.h"
+#include "util/floatingpoint_literal_symfpu.h"
+
+namespace cvc5::internal {
+namespace test {
+
+class TestUtilBlackFloatingPoint : public TestInternal
+{
+ protected:
+  TestUtilBlackFloatingPoint() : d_fp16(5, 11), d_fp128(15, 113) {}
+
+  FloatingPointSize d_fp16;
+  FloatingPointSize d_fp128;
+};
+
+/* -------------------------------------------------------------------------- */
+
+TEST_F(TestUtilBlackFloatingPoint, move)
+{
+  BitVector bv1 = BitVector::mkRandom(d_fp16.packedWidth());
+  BitVector bv2 = BitVector::mkRandom(d_fp128.packedWidth());
+  FloatingPoint fp1(d_fp16, bv1);
+  FloatingPoint fp2(d_fp128, bv2);
+
+  fp1 = std::move(fp2);
+  ASSERT_EQ(fp1.pack(), bv2);
+  ASSERT_EQ(fp1.getSize(), d_fp128);
+
+  auto fp3 = std::move(fp1);
+  ASSERT_EQ(fp3.pack(), bv2);
+  ASSERT_EQ(fp3.getSize(), d_fp128);
+
+  FloatingPoint fp4(std::move(fp3));
+  ASSERT_EQ(fp4.pack(), bv2);
+  ASSERT_EQ(fp4.getSize(), d_fp128);
+}
+
+TEST_F(TestUtilBlackFloatingPoint, makeMinSubnormal)
+{
+  FloatingPointSize size16(5, 11);
+  FloatingPointSize size32(8, 24);
+  FloatingPointSize size64(11, 53);
+  FloatingPointSize size128(15, 113);
+
+  FloatingPoint fp16 = FloatingPoint::makeMinSubnormal(size16, true);
+  ASSERT_TRUE(fp16.isSubnormal());
+  FloatingPoint mfp16 = FloatingPoint::makeMinSubnormal(size16, false);
+  ASSERT_TRUE(mfp16.isSubnormal());
+
+  FloatingPoint fp32 = FloatingPoint::makeMinSubnormal(size32, true);
+  ASSERT_TRUE(fp32.isSubnormal());
+  FloatingPoint mfp32 = FloatingPoint::makeMinSubnormal(size32, false);
+  ASSERT_TRUE(mfp32.isSubnormal());
+
+  FloatingPoint fp64 = FloatingPoint::makeMinSubnormal(size64, true);
+  ASSERT_TRUE(fp64.isSubnormal());
+  FloatingPoint mfp64 = FloatingPoint::makeMinSubnormal(size64, false);
+  ASSERT_TRUE(mfp64.isSubnormal());
+
+  FloatingPoint fp128 = FloatingPoint::makeMinSubnormal(size128, true);
+  ASSERT_TRUE(fp128.isSubnormal());
+  FloatingPoint mfp128 = FloatingPoint::makeMinSubnormal(size128, false);
+  ASSERT_TRUE(mfp128.isSubnormal());
+}
+
+TEST_F(TestUtilBlackFloatingPoint, makeMaxSubnormal)
+{
+  FloatingPointSize size16(5, 11);
+  FloatingPointSize size32(8, 24);
+  FloatingPointSize size64(11, 53);
+  FloatingPointSize size128(15, 113);
+
+  FloatingPoint fp16 = FloatingPoint::makeMaxSubnormal(size16, true);
+  ASSERT_TRUE(fp16.isSubnormal());
+  FloatingPoint mfp16 = FloatingPoint::makeMaxSubnormal(size16, false);
+  ASSERT_TRUE(mfp16.isSubnormal());
+
+  FloatingPoint fp32 = FloatingPoint::makeMaxSubnormal(size32, true);
+  ASSERT_TRUE(fp32.isSubnormal());
+  FloatingPoint mfp32 = FloatingPoint::makeMaxSubnormal(size32, false);
+  ASSERT_TRUE(mfp32.isSubnormal());
+
+  FloatingPoint fp64 = FloatingPoint::makeMaxSubnormal(size64, true);
+  ASSERT_TRUE(fp64.isSubnormal());
+  FloatingPoint mfp64 = FloatingPoint::makeMaxSubnormal(size64, false);
+  ASSERT_TRUE(mfp64.isSubnormal());
+
+  FloatingPoint fp128 = FloatingPoint::makeMaxSubnormal(size128, true);
+  ASSERT_TRUE(fp128.isSubnormal());
+  FloatingPoint mfp128 = FloatingPoint::makeMaxSubnormal(size128, false);
+  ASSERT_TRUE(mfp128.isSubnormal());
+}
+
+TEST_F(TestUtilBlackFloatingPoint, makeMinNormal)
+{
+  FloatingPointSize size16(5, 11);
+  FloatingPointSize size32(8, 24);
+  FloatingPointSize size64(11, 53);
+  FloatingPointSize size128(15, 113);
+
+  FloatingPoint fp16 = FloatingPoint::makeMinNormal(size16, true);
+  ASSERT_TRUE(fp16.isNormal());
+  FloatingPoint mfp16 = FloatingPoint::makeMinNormal(size16, false);
+  ASSERT_TRUE(mfp16.isNormal());
+
+  FloatingPoint fp32 = FloatingPoint::makeMinNormal(size32, true);
+  ASSERT_TRUE(fp32.isNormal());
+  FloatingPoint mfp32 = FloatingPoint::makeMinNormal(size32, false);
+  ASSERT_TRUE(mfp32.isNormal());
+
+  FloatingPoint fp64 = FloatingPoint::makeMinNormal(size64, true);
+  ASSERT_TRUE(fp64.isNormal());
+  FloatingPoint mfp64 = FloatingPoint::makeMinNormal(size64, false);
+  ASSERT_TRUE(mfp64.isNormal());
+
+  FloatingPoint fp128 = FloatingPoint::makeMinNormal(size128, true);
+  ASSERT_TRUE(fp128.isNormal());
+  FloatingPoint mfp128 = FloatingPoint::makeMinNormal(size128, false);
+  ASSERT_TRUE(mfp128.isNormal());
+}
+
+TEST_F(TestUtilBlackFloatingPoint, makeMaxNormal)
+{
+  FloatingPointSize size16(5, 11);
+  FloatingPointSize size32(8, 24);
+  FloatingPointSize size64(11, 53);
+  FloatingPointSize size128(15, 113);
+
+  FloatingPoint fp16 = FloatingPoint::makeMaxNormal(size16, true);
+  ASSERT_TRUE(fp16.isNormal());
+  FloatingPoint mfp16 = FloatingPoint::makeMaxNormal(size16, false);
+  ASSERT_TRUE(mfp16.isNormal());
+
+  FloatingPoint fp32 = FloatingPoint::makeMaxNormal(size32, true);
+  ASSERT_TRUE(fp32.isNormal());
+  FloatingPoint mfp32 = FloatingPoint::makeMaxNormal(size32, false);
+  ASSERT_TRUE(mfp32.isNormal());
+
+  FloatingPoint fp64 = FloatingPoint::makeMaxNormal(size64, true);
+  ASSERT_TRUE(fp64.isNormal());
+  FloatingPoint mfp64 = FloatingPoint::makeMaxNormal(size64, false);
+  ASSERT_TRUE(mfp64.isNormal());
+
+  FloatingPoint fp128 = FloatingPoint::makeMaxNormal(size128, true);
+  ASSERT_TRUE(fp128.isNormal());
+  FloatingPoint mfp128 = FloatingPoint::makeMaxNormal(size128, false);
+  ASSERT_TRUE(mfp128.isNormal());
+}
+
+TEST_F(TestUtilBlackFloatingPoint, fromSbv1)
+{
+  BitVector bv0(1, 0u);
+  BitVector bv1(1, 1u);
+  for (const auto& bv : {bv0, bv1})
+  {
+    for (bool sign : {true, false})
+    {
+      FloatingPoint fp(FloatingPointSize(5, 11),
+                       RoundingMode::ROUND_NEAREST_TIES_TO_AWAY,
+                       bv,
+                       sign);
+    }
+  }
+}
+
+}  // namespace test
+}  // namespace cvc5::internal

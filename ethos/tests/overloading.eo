@@ -1,0 +1,24 @@
+(declare-const Int Type)
+(declare-const Real Type)
+
+(program a.typeunion ()
+    :signature (Type Type) Type
+    (
+      ((a.typeunion Int Int) Int)
+      ((a.typeunion Int Real) Real)
+      ((a.typeunion Real Int) Real)
+      ((a.typeunion Real Real) Real)
+    )
+)
+
+(declare-parameterized-const + ((T Type :implicit) (U Type :implicit)) (-> T U (a.typeunion T U)))
+
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+
+
+(declare-consts <numeral> Int)
+(declare-consts <decimal> Real)
+
+
+(assume a1 (= (+ 1.0 1) (+ 2.0 2)))

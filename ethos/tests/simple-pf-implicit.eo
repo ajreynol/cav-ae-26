@@ -1,0 +1,16 @@
+
+(declare-parameterized-const = ((T Type :implicit)) (-> T T Bool))
+
+
+(declare-rule eq-symm ((T Type) (x T) (y T))
+  :premises ((= x y))
+  :args ()
+  :conclusion (= y x))
+
+  
+(declare-const Int Type)
+(declare-const a Int)
+(declare-const b Int)
+(declare-const c Bool)
+(assume a1 (= a b))
+(step a2 (= b a) :rule eq-symm :premises (a1) :args ())

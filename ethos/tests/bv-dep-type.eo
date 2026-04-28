@@ -1,0 +1,15 @@
+(declare-const Int Type)
+
+(declare-const BitVec (-> Int Type)) 
+
+(declare-parameterized-const bvadd ((n Int)) (->
+  (BitVec n)
+  (BitVec n)
+  (BitVec n)))
+
+(declare-const m Int)
+(declare-const dummy Int)
+
+(declare-const x (BitVec m))
+(declare-const y (BitVec m))
+(define z () (bvadd m x y) :type (BitVec m))
