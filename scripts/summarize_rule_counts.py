@@ -13,7 +13,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
-DEFAULT_CSV_PATH = DEFAULT_OUTPUT_DIR / "rule-counts.csv"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "rule-counts.csv"
 STAT_BLOCK_RE = re.compile(
     r"(?P<name>finalProof::(?:dslRuleCount|ruleCount|theoryRewriteRuleCount))"
     r"\s*=\s*\{(?P<body>.*?)\}",
@@ -41,7 +42,7 @@ def parse_args() -> argparse.Namespace:
         "--csv",
         type=Path,
         default=DEFAULT_CSV_PATH,
-        help="Destination CSV path.",
+        help="Destination CSV path. Defaults to ./data/rule-counts.csv.",
     )
     return parser.parse_args()
 

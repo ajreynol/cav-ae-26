@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
+DEFAULT_OUTPUT_ROOT = REPO_ROOT / "output"
 DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_CVC5_BINARY = REPO_ROOT / "cvc5" / "build" / "bin" / "cvc5"
 DEFAULT_ETHOS_BINARY = REPO_ROOT / "ethos" / "build" / "src" / "ethos"
@@ -63,6 +63,10 @@ def log(message: str) -> None:
     print(message, flush=True)
 
 
+def default_output_dir(sample_size: int) -> Path:
+    return DEFAULT_OUTPUT_ROOT / str(sample_size)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Sample benchmarks and write cvc5/Ethos raw outputs."
@@ -87,8 +91,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Output directory to recreate on each run.",
+        default=None,
+        help="Raw output directory to recreate on each run. Defaults to ./output/<sample_size>.",
     )
     parser.add_argument(
         "--seed",
@@ -102,6 +106,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Number of benchmarks to process in parallel.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help="Per-benchmark timeout in seconds for each cvc5/Ethos invocation.",
     )
     parser.add_argument(
         "--cvc5-binary",
@@ -326,7 +336,7 @@ def recreate_output_dir(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
-def run_command(command: list[str]) -> CommandResult:
+def run_command(command: list[str], timeout_seconds: float) -> CommandResult:
     start = time.perf_counter()
     try:
         completed = subprocess.run(
@@ -334,7 +344,7 @@ def run_command(command: list[str]) -> CommandResult:
             cwd=REPO_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=DEFAULT_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
             check=False,
         )
         return CommandResult(
@@ -424,6 +434,7 @@ def run_ethos_check(
     bench_dir: Path,
     ethos_binary: Path,
     cpc_signature: Path,
+    timeout_seconds: float,
 ) -> tuple[bytes, str | None, float, int, bool]:
     proof_output_path = bench_dir / "cvc5-proof-gen.txt"
     proof_bytes, error_text = extract_ethos_proof(proof_output_path, cpc_signature)
@@ -435,7 +446,7 @@ def run_ethos_check(
         handle.write(proof_bytes)
 
     try:
-        result = run_command([str(ethos_binary), str(temp_path)])
+        result = run_command([str(ethos_binary), str(temp_path)], timeout_seconds)
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -460,6 +471,7 @@ def process_benchmark(
     cvc5_binary: Path,
     ethos_binary: Path,
     cpc_signature: Path,
+    timeout_seconds: float,
 ) -> tuple[str, list[str]]:
     rel_bench = str(bench.relative_to(bench_root))
     bench_dir = benchmark_output_dir(output_dir, bench_root, bench)
@@ -468,7 +480,7 @@ def process_benchmark(
     issues: list[str] = []
     for output_name, extra_args in CVC5_RUNS:
         command = [str(cvc5_binary), *BASE_CVC5_ARGS, *extra_args, str(bench)]
-        result = run_command(command)
+        result = run_command(command, timeout_seconds)
         output_data = result.stdout
         if output_name == "cvc5-solve-proofs-stats.txt":
             output_data = combine_streams(result.stdout, result.stderr)
@@ -494,7 +506,7 @@ def process_benchmark(
             )
 
     ethos_output, ethos_issue, ethos_elapsed_seconds, ethos_returncode, ethos_timed_out = run_ethos_check(
-        bench_dir, ethos_binary, cpc_signature
+        bench_dir, ethos_binary, cpc_signature, timeout_seconds
     )
     write_stdout(
         bench_dir / "ethos-check.txt",
@@ -514,11 +526,15 @@ def main() -> int:
     if args.jobs < 1:
         print("--jobs must be at least 1", file=sys.stderr)
         return 2
+    if args.timeout <= 0:
+        print("--timeout must be greater than 0", file=sys.stderr)
+        return 2
     log(f"[start] Running artifact subset with sample size {args.sample_size}")
     bench_root = detect_benchmark_root(args.bench_root)
     log(f"[start] Benchmark root: {bench_root}")
     log("[start] Using all benchmarks under the benchmark root")
     log(f"[start] Benchmark workers: {args.jobs}")
+    log(f"[start] Per-benchmark timeout: {args.timeout:.1f}s")
 
     if not args.dry_run:
         log("[setup] Ensuring repo-local cvc5 and ethos builds are available")
@@ -546,7 +562,11 @@ def main() -> int:
         print(f"Could not find CPC signature at {cpc_signature}.", file=sys.stderr)
         return 2
 
-    output_dir = args.output_dir.resolve()
+    output_dir = (
+        args.output_dir.resolve()
+        if args.output_dir is not None
+        else default_output_dir(args.sample_size).resolve()
+    )
     log(f"[output] Recreating output directory {output_dir}")
     recreate_output_dir(output_dir)
     log(f"[benchmarks] Selected {len(benchmarks)} benchmarks")
@@ -555,7 +575,13 @@ def main() -> int:
     if args.jobs == 1:
         for index, bench in enumerate(benchmarks, start=1):
             rel_bench, bench_issues = process_benchmark(
-                bench_root, bench, output_dir, cvc5_binary, ethos_binary, cpc_signature
+                bench_root,
+                bench,
+                output_dir,
+                cvc5_binary,
+                ethos_binary,
+                cpc_signature,
+                args.timeout,
             )
             log(f"[{index}/{len(benchmarks)}] {rel_bench}")
             issues.extend(bench_issues)
@@ -570,6 +596,7 @@ def main() -> int:
                     cvc5_binary,
                     ethos_binary,
                     cpc_signature,
+                    args.timeout,
                 ): bench
                 for bench in benchmarks
             }

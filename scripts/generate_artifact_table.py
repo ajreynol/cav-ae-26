@@ -11,8 +11,9 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CSV_PATH = REPO_ROOT / "output" / "summary.csv"
-DEFAULT_MARKDOWN_PATH = REPO_ROOT / "output" / "summary-table.md"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "summary.csv"
+DEFAULT_MARKDOWN_PATH = DEFAULT_DATA_DIR / "summary-table.md"
 CATEGORY_ORDER = (
     "QF+UF",
     "QF+Arith",
@@ -52,19 +53,19 @@ class AggregateRow:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a Markdown summary table from output/summary.csv."
+        description="Generate a Markdown summary table from data/summary.csv."
     )
     parser.add_argument(
         "--csv",
         type=Path,
         default=DEFAULT_CSV_PATH,
-        help="Input CSV path.",
+        help="Input CSV path. Defaults to ./data/summary.csv.",
     )
     parser.add_argument(
         "--markdown",
         type=Path,
         default=DEFAULT_MARKDOWN_PATH,
-        help="Output Markdown file path.",
+        help="Output Markdown file path. Defaults to ./data/summary-table.md.",
     )
     parser.add_argument(
         "--title",

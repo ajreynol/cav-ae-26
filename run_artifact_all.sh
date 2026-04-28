@@ -4,7 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
-DEFAULT_OUTPUT_DIR="${REPO_ROOT}/output"
+DEFAULT_OUTPUT_ROOT="${REPO_ROOT}/output"
+DEFAULT_DATA_DIR="${REPO_ROOT}/data"
+DEFAULT_TIMEOUT_SECONDS="60"
 
 usage() {
   cat <<'EOF'
@@ -22,10 +24,11 @@ Arguments:
 Options:
   --bench-root PATH           Benchmark root directory.
   --benchmark-list PATH       Optional file listing benchmarks to run.
-  --output-dir PATH           Output directory for all generated artifacts.
-                              Default: ./output
+  --output-dir PATH           Raw benchmark output directory.
+                              Default: ./output/N
   --seed N                    Random seed for benchmark sampling. Default: 0
   -j N, --jobs N              Number of benchmark workers. Default: 1
+  --timeout SECONDS           Per-benchmark timeout. Default: 60
   --cvc5-binary PATH          Optional cvc5 binary path.
   --ethos-binary PATH         Optional ethos binary path.
   -h, --help                  Show this help message.
@@ -60,9 +63,10 @@ fi
 sample_size=""
 bench_root=""
 benchmark_list=""
-output_dir="${DEFAULT_OUTPUT_DIR}"
+output_dir=""
 seed="0"
 jobs="1"
+timeout_seconds="${DEFAULT_TIMEOUT_SECONDS}"
 cvc5_binary=""
 ethos_binary=""
 
@@ -73,6 +77,8 @@ if ! [[ "${sample_size}" =~ ^[0-9]+$ ]]; then
   printf 'Sample size must be a non-negative integer.\n' >&2
   exit 2
 fi
+
+output_dir="${DEFAULT_OUTPUT_ROOT}/${sample_size}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -99,6 +105,11 @@ while [[ $# -gt 0 ]]; do
     -j|--jobs)
       [[ $# -ge 2 ]] || { printf 'Missing value for %s\n' "$1" >&2; exit 2; }
       jobs="$2"
+      shift 2
+      ;;
+    --timeout)
+      [[ $# -ge 2 ]] || { printf 'Missing value for %s\n' "$1" >&2; exit 2; }
+      timeout_seconds="$2"
       shift 2
       ;;
     --cvc5-binary)
@@ -133,10 +144,16 @@ if ! [[ "${seed}" =~ ^-?[0-9]+$ ]]; then
   exit 2
 fi
 
+if ! python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > 0 else 1)' "${timeout_seconds}"; then
+  printf '--timeout must be a positive number.\n' >&2
+  exit 2
+fi
+
 output_dir="$(resolve_path "${output_dir}")"
-summary_csv="${output_dir}/summary.csv"
-rule_counts_csv="${output_dir}/rule-counts.csv"
-table_markdown="${output_dir}/summary-table.md"
+data_dir="$(resolve_path "${DEFAULT_DATA_DIR}")"
+summary_csv="${data_dir}/summary.csv"
+rule_counts_csv="${data_dir}/rule-counts.csv"
+table_markdown="${data_dir}/summary-table.md"
 
 run_subset_cmd=(
   "${REPO_ROOT}/run_artifact_subset.py"
@@ -144,6 +161,7 @@ run_subset_cmd=(
   "-j" "${jobs}"
   "--output-dir" "${output_dir}"
   "--seed" "${seed}"
+  "--timeout" "${timeout_seconds}"
 )
 if [[ -n "${bench_root}" ]]; then
   run_subset_cmd+=("--bench-root" "$(resolve_path "${bench_root}")")

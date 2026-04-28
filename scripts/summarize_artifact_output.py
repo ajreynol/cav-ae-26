@@ -12,7 +12,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
-DEFAULT_CSV_PATH = DEFAULT_OUTPUT_DIR / "summary.csv"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "summary.csv"
 TIMING_MARKER = "\n[run_artifact_subset] elapsed_seconds="
 TIMING_RE = re.compile(
     r"\[run_artifact_subset\] elapsed_seconds=([0-9]+(?:\.[0-9]+)?)"
@@ -49,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         "--csv",
         type=Path,
         default=DEFAULT_CSV_PATH,
-        help="Destination CSV path.",
+        help="Destination CSV path. Defaults to ./data/summary.csv.",
     )
     parser.add_argument(
         "--no-benchmark",
