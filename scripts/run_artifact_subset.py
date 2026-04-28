@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 import random
 import shutil
@@ -96,6 +97,13 @@ def parse_args() -> argparse.Namespace:
         help="Random seed used when sampling benchmarks.",
     )
     parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=1,
+        help="Number of benchmarks to process in parallel.",
+    )
+    parser.add_argument(
         "--cvc5-binary",
         type=Path,
         default=None,
@@ -162,7 +170,7 @@ def cvc5_has_statistics(binary: Path) -> bool:
     return "statistics" in output and "yes" in output.partition("statistics")[2][:32]
 
 
-def ensure_default_binaries() -> tuple[Path, Path]:
+def ensure_default_binaries(jobs: int) -> tuple[Path, Path]:
     cvc5_exists = DEFAULT_CVC5_BINARY.is_file()
     ethos_exists = DEFAULT_ETHOS_BINARY.is_file()
     cvc5_stats_ok = cvc5_exists and cvc5_has_statistics(DEFAULT_CVC5_BINARY)
@@ -178,8 +186,8 @@ def ensure_default_binaries() -> tuple[Path, Path]:
         missing.append("cvc5-with-statistics")
     log(f"[setup] Missing repo-local binaries: {', '.join(missing)}")
 
-    jobs = os.cpu_count() or 4
-    jobs_arg = f"-j{jobs}"
+    build_jobs = jobs if jobs > 0 else (os.cpu_count() or 4)
+    jobs_arg = f"-j{build_jobs}"
     if (not cvc5_exists or not cvc5_stats_ok) and not ethos_exists:
         run_setup_command(
             [str((REPO_ROOT / "build_all.sh").resolve()), jobs_arg],
@@ -204,14 +212,14 @@ def ensure_default_binaries() -> tuple[Path, Path]:
 
 
 def resolve_toolchain(
-    cvc5_binary_arg: Path | None, ethos_binary_arg: Path | None
+    cvc5_binary_arg: Path | None, ethos_binary_arg: Path | None, jobs: int
 ) -> tuple[Path, Path]:
     explicit_cvc5 = resolve_explicit_binary(cvc5_binary_arg, "cvc5")
     explicit_ethos = resolve_explicit_binary(ethos_binary_arg, "ethos")
     default_cvc5 = None
     default_ethos = None
     if explicit_cvc5 is None or explicit_ethos is None:
-        default_cvc5, default_ethos = ensure_default_binaries()
+        default_cvc5, default_ethos = ensure_default_binaries(jobs)
     return (
         explicit_cvc5 if explicit_cvc5 is not None else default_cvc5,
         explicit_ethos if explicit_ethos is not None else default_ethos,
@@ -346,9 +354,12 @@ def run_command(command: list[str]) -> CommandResult:
         )
 
 
-def format_output_with_timing(data: bytes, elapsed_seconds: float) -> bytes:
+def format_output_with_metadata(
+    data: bytes, elapsed_seconds: float, returncode: int, timed_out: bool
+) -> bytes:
     footer = (
-        f"\n[run_artifact_subset] elapsed_seconds={elapsed_seconds:.6f}\n"
+        f"\n[run_artifact_subset] elapsed_seconds={elapsed_seconds:.6f} "
+        f"returncode={returncode} timed_out={'true' if timed_out else 'false'}\n"
     ).encode("utf-8")
     if data.endswith(b"\n"):
         return data + footer
@@ -365,10 +376,16 @@ def combine_streams(stdout: bytes, stderr: bytes) -> bytes:
     return stdout + b"\n" + stderr
 
 
-def write_stdout(path: Path, data: bytes, elapsed_seconds: float | None = None) -> None:
+def write_stdout(
+    path: Path,
+    data: bytes,
+    elapsed_seconds: float | None = None,
+    returncode: int | None = None,
+    timed_out: bool | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if elapsed_seconds is not None:
-        data = format_output_with_timing(data, elapsed_seconds)
+    if elapsed_seconds is not None and returncode is not None and timed_out is not None:
+        data = format_output_with_metadata(data, elapsed_seconds, returncode, timed_out)
     path.write_bytes(data)
 
 
@@ -407,11 +424,11 @@ def run_ethos_check(
     bench_dir: Path,
     ethos_binary: Path,
     cpc_signature: Path,
-) -> tuple[bytes, str | None, float]:
+) -> tuple[bytes, str | None, float, int, bool]:
     proof_output_path = bench_dir / "cvc5-proof-gen.txt"
     proof_bytes, error_text = extract_ethos_proof(proof_output_path, cpc_signature)
     if proof_bytes is None:
-        return error_text.encode("utf-8"), error_text.strip(), 0.0
+        return error_text.encode("utf-8"), error_text.strip(), 0.0, 1, False
 
     with tempfile.NamedTemporaryFile(suffix=".cpc", delete=False) as handle:
         temp_path = Path(handle.name)
@@ -429,20 +446,84 @@ def run_ethos_check(
             f"ethos-check.txt rc={result.returncode} "
             f"timeout={result.timed_out} stderr_bytes={len(result.stderr)}"
         )
-    return output_data, issue, result.elapsed_seconds
+    else:
+        status_line = first_nonempty_line_bytes(output_data).lower()
+        if status_line not in ("correct", "incomplete"):
+            issue = f"ethos-check.txt unexpected_status={status_line!r}"
+    return output_data, issue, result.elapsed_seconds, result.returncode, result.timed_out
+
+
+def process_benchmark(
+    bench_root: Path,
+    bench: Path,
+    output_dir: Path,
+    cvc5_binary: Path,
+    ethos_binary: Path,
+    cpc_signature: Path,
+) -> tuple[str, list[str]]:
+    rel_bench = str(bench.relative_to(bench_root))
+    bench_dir = benchmark_output_dir(output_dir, bench_root, bench)
+    bench_dir.mkdir(parents=True, exist_ok=True)
+
+    issues: list[str] = []
+    for output_name, extra_args in CVC5_RUNS:
+        command = [str(cvc5_binary), *BASE_CVC5_ARGS, *extra_args, str(bench)]
+        result = run_command(command)
+        output_data = result.stdout
+        if output_name == "cvc5-solve-proofs-stats.txt":
+            output_data = combine_streams(result.stdout, result.stderr)
+        output_elapsed_seconds = None
+        output_returncode = None
+        output_timed_out = None
+        if output_name != "cvc5-solve-proofs-stats.txt":
+            output_elapsed_seconds = result.elapsed_seconds
+            output_returncode = result.returncode
+            output_timed_out = result.timed_out
+        write_stdout(
+            bench_dir / output_name,
+            output_data,
+            elapsed_seconds=output_elapsed_seconds,
+            returncode=output_returncode,
+            timed_out=output_timed_out,
+        )
+        first_line = first_nonempty_line_bytes(output_data)
+        if result.returncode != 0 or result.timed_out or first_line != "unsat":
+            issues.append(
+                f"{rel_bench}: {output_name} rc={result.returncode} "
+                f"timeout={result.timed_out} first_line={first_line!r}"
+            )
+
+    ethos_output, ethos_issue, ethos_elapsed_seconds, ethos_returncode, ethos_timed_out = run_ethos_check(
+        bench_dir, ethos_binary, cpc_signature
+    )
+    write_stdout(
+        bench_dir / "ethos-check.txt",
+        ethos_output,
+        elapsed_seconds=ethos_elapsed_seconds,
+        returncode=ethos_returncode,
+        timed_out=ethos_timed_out,
+    )
+    if ethos_issue is not None:
+        issues.append(f"{rel_bench}: {ethos_issue}")
+
+    return rel_bench, issues
 
 
 def main() -> int:
     args = parse_args()
+    if args.jobs < 1:
+        print("--jobs must be at least 1", file=sys.stderr)
+        return 2
     log(f"[start] Running artifact subset with sample size {args.sample_size}")
     bench_root = detect_benchmark_root(args.bench_root)
     log(f"[start] Benchmark root: {bench_root}")
     log("[start] Using all benchmarks under the benchmark root")
+    log(f"[start] Benchmark workers: {args.jobs}")
 
     if not args.dry_run:
         log("[setup] Ensuring repo-local cvc5 and ethos builds are available")
         cvc5_binary, ethos_binary = resolve_toolchain(
-            args.cvc5_binary, args.ethos_binary
+            args.cvc5_binary, args.ethos_binary, args.jobs
         )
         log(f"[setup] Using cvc5 binary: {cvc5_binary}")
         log(f"[setup] Using ethos binary: {ethos_binary}")
@@ -471,43 +552,33 @@ def main() -> int:
     log(f"[benchmarks] Selected {len(benchmarks)} benchmarks")
 
     issues: list[str] = []
-    for index, bench in enumerate(benchmarks, start=1):
-        rel_bench = bench.relative_to(bench_root)
-        log(f"[{index}/{len(benchmarks)}] {rel_bench}")
-        bench_dir = benchmark_output_dir(output_dir, bench_root, bench)
-        bench_dir.mkdir(parents=True, exist_ok=True)
-
-        for output_name, extra_args in CVC5_RUNS:
-            command = [str(cvc5_binary), *BASE_CVC5_ARGS, *extra_args, str(bench)]
-            result = run_command(command)
-            output_data = result.stdout
-            if output_name == "cvc5-solve-proofs-stats.txt":
-                output_data = combine_streams(result.stdout, result.stderr)
-            output_elapsed_seconds = None
-            if output_name != "cvc5-solve-proofs-stats.txt":
-                output_elapsed_seconds = result.elapsed_seconds
-            write_stdout(
-                bench_dir / output_name,
-                output_data,
-                elapsed_seconds=output_elapsed_seconds,
+    if args.jobs == 1:
+        for index, bench in enumerate(benchmarks, start=1):
+            rel_bench, bench_issues = process_benchmark(
+                bench_root, bench, output_dir, cvc5_binary, ethos_binary, cpc_signature
             )
-            first_line = first_nonempty_line_bytes(output_data)
-            if result.returncode != 0 or result.timed_out or first_line != "unsat":
-                issues.append(
-                    f"{rel_bench}: {output_name} rc={result.returncode} "
-                    f"timeout={result.timed_out} first_line={first_line!r}"
-                )
-
-        ethos_output, ethos_issue, ethos_elapsed_seconds = run_ethos_check(
-            bench_dir, ethos_binary, cpc_signature
-        )
-        write_stdout(
-            bench_dir / "ethos-check.txt",
-            ethos_output,
-            elapsed_seconds=ethos_elapsed_seconds,
-        )
-        if ethos_issue is not None:
-            issues.append(f"{rel_bench}: {ethos_issue}")
+            log(f"[{index}/{len(benchmarks)}] {rel_bench}")
+            issues.extend(bench_issues)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            future_to_bench = {
+                executor.submit(
+                    process_benchmark,
+                    bench_root,
+                    bench,
+                    output_dir,
+                    cvc5_binary,
+                    ethos_binary,
+                    cpc_signature,
+                ): bench
+                for bench in benchmarks
+            }
+            for index, future in enumerate(
+                concurrent.futures.as_completed(future_to_bench), start=1
+            ):
+                rel_bench, bench_issues = future.result()
+                log(f"[{index}/{len(benchmarks)}] {rel_bench}")
+                issues.extend(bench_issues)
 
     if issues:
         print("\nIssues seen while running benchmarks:", file=sys.stderr)

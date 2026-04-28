@@ -14,7 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
 DEFAULT_CSV_PATH = DEFAULT_OUTPUT_DIR / "summary.csv"
 TIMING_MARKER = "\n[run_artifact_subset] elapsed_seconds="
-TIMING_RE = re.compile(r"\[run_artifact_subset\] elapsed_seconds=([0-9]+(?:\.[0-9]+)?)")
+TIMING_RE = re.compile(
+    r"\[run_artifact_subset\] elapsed_seconds=([0-9]+(?:\.[0-9]+)?)"
+    r"(?: returncode=(-?[0-9]+))?"
+    r"(?: timed_out=(true|false))?"
+)
 PROOF_SIZE_RE = re.compile(
     r"^(?:finalProof::totalRuleCount|finalProofRuleCount)\s*=\s*(\d+)\s*$",
     re.MULTILINE,
@@ -59,13 +63,15 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def split_body_and_time(text: str) -> tuple[str, float | None]:
+def split_body_and_time(text: str) -> tuple[str, float | None, int | None, bool | None]:
     match = TIMING_RE.search(text)
     elapsed = float(match.group(1)) if match else None
+    returncode = int(match.group(2)) if match and match.group(2) is not None else None
+    timed_out = match.group(3) == "true" if match and match.group(3) is not None else None
     marker_index = text.find(TIMING_MARKER)
     if marker_index != -1:
-        return text[:marker_index], elapsed
-    return text, elapsed
+        return text[:marker_index], elapsed, returncode, timed_out
+    return text, elapsed, returncode, timed_out
 
 
 def first_nonempty_line(text: str) -> str:
@@ -77,13 +83,17 @@ def first_nonempty_line(text: str) -> str:
 
 
 def parse_cvc5_status(path: Path) -> tuple[str, float | None]:
-    body, elapsed = split_body_and_time(read_text(path))
+    body, elapsed, _returncode, timed_out = split_body_and_time(read_text(path))
+    if timed_out:
+        return "timeout", elapsed
     status = "unsat" if first_nonempty_line(body) == "unsat" else "cvc5-error"
     return status, elapsed
 
 
 def parse_ethos_status(path: Path) -> tuple[str, float | None]:
-    body, elapsed = split_body_and_time(read_text(path))
+    body, elapsed, _returncode, timed_out = split_body_and_time(read_text(path))
+    if timed_out:
+        return "timeout", elapsed
     normalized = body.lower()
     if re.search(r"(?m)^\s*correct\s*$", normalized):
         return "correct", elapsed
@@ -110,6 +120,8 @@ def parse_proof_size(bench_dir: Path) -> str:
 def combine_check_status(
     proof_gen_status: str, ethos_status_line: str
 ) -> str:
+    if proof_gen_status == "timeout" or ethos_status_line == "timeout":
+        return "timeout"
     if proof_gen_status != "unsat":
         return "cvc5-error"
     if ethos_status_line == "correct":
