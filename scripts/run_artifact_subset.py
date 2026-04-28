@@ -305,6 +305,15 @@ def write_stdout(path: Path, data: bytes, elapsed_seconds: float | None = None) 
     path.write_bytes(data)
 
 
+def first_nonempty_line_bytes(data: bytes) -> str:
+    text = data.decode("utf-8", errors="replace")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
+
+
 def benchmark_output_dir(output_dir: Path, bench_root: Path, bench_path: Path) -> Path:
     return output_dir / bench_path.relative_to(bench_root).with_suffix("")
 
@@ -337,7 +346,7 @@ def run_ethos_check(
     if proof_bytes is None:
         return error_text.encode("utf-8"), error_text.strip(), 0.0
 
-    with tempfile.NamedTemporaryFile(suffix=".eo", delete=False) as handle:
+    with tempfile.NamedTemporaryFile(suffix=".cpc", delete=False) as handle:
         temp_path = Path(handle.name)
         handle.write(proof_bytes)
 
@@ -346,13 +355,14 @@ def run_ethos_check(
     finally:
         temp_path.unlink(missing_ok=True)
 
+    output_data = combine_streams(result.stdout, result.stderr)
     issue = None
-    if result.returncode != 0 or result.timed_out or result.stderr:
+    if result.returncode != 0 or result.timed_out:
         issue = (
             f"ethos-check.txt rc={result.returncode} "
             f"timeout={result.timed_out} stderr_bytes={len(result.stderr)}"
         )
-    return result.stdout, issue, result.elapsed_seconds
+    return output_data, issue, result.elapsed_seconds
 
 
 def main() -> int:
@@ -414,10 +424,11 @@ def main() -> int:
                 output_data,
                 elapsed_seconds=output_elapsed_seconds,
             )
-            if result.returncode != 0 or result.timed_out or result.stderr:
+            first_line = first_nonempty_line_bytes(output_data)
+            if result.returncode != 0 or result.timed_out or first_line != "unsat":
                 issues.append(
                     f"{rel_bench}: {output_name} rc={result.returncode} "
-                    f"timeout={result.timed_out} stderr_bytes={len(result.stderr)}"
+                    f"timeout={result.timed_out} first_line={first_line!r}"
                 )
 
         ethos_output, ethos_issue, ethos_elapsed_seconds = run_ethos_check(

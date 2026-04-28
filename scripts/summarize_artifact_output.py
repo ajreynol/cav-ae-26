@@ -15,7 +15,10 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
 DEFAULT_CSV_PATH = DEFAULT_OUTPUT_DIR / "summary.csv"
 TIMING_MARKER = "\n[run_artifact_subset] elapsed_seconds="
 TIMING_RE = re.compile(r"\[run_artifact_subset\] elapsed_seconds=([0-9]+(?:\.[0-9]+)?)")
-PROOF_SIZE_RE = re.compile(r"^finalProofRuleCount\s*=\s*(\d+)\s*$", re.MULTILINE)
+PROOF_SIZE_RE = re.compile(
+    r"^(?:finalProof::totalRuleCount|finalProofRuleCount)\s*=\s*(\d+)\s*$",
+    re.MULTILINE,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,9 +38,9 @@ def parse_args() -> argparse.Namespace:
         help="Destination CSV path.",
     )
     parser.add_argument(
-        "--include-benchmark",
+        "--no-benchmark",
         action="store_true",
-        help="Include the benchmark-relative path as the first CSV column.",
+        help="Omit the benchmark-relative path column from the CSV.",
     )
     return parser.parse_args()
 
@@ -71,6 +74,11 @@ def parse_cvc5_status(path: Path) -> tuple[str, float | None]:
 
 def parse_ethos_status(path: Path) -> tuple[str, float | None]:
     body, elapsed = split_body_and_time(read_text(path))
+    normalized = body.lower()
+    if re.search(r"(?m)^\s*correct\s*$", normalized):
+        return "correct", elapsed
+    if re.search(r"(?m)^\s*incomplete\s*$", normalized):
+        return "incomplete", elapsed
     return first_nonempty_line(body), elapsed
 
 
@@ -129,6 +137,7 @@ def main() -> int:
     args.csv.parent.mkdir(parents=True, exist_ok=True)
 
     headers = [
+        "benchmark",
         "solve-status",
         "solve-time",
         "proof-status",
@@ -137,8 +146,8 @@ def main() -> int:
         "check-time",
         "proof-size",
     ]
-    if args.include_benchmark:
-        headers = ["benchmark", *headers]
+    if args.no_benchmark:
+        headers = headers[1:]
 
     with args.csv.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
@@ -158,6 +167,7 @@ def main() -> int:
                 check_time_value = (proof_gen_time or 0.0) + (ethos_time or 0.0)
 
             row = [
+                str(bench_dir.relative_to(output_dir)),
                 solve_status,
                 format_time(solve_time),
                 proof_status,
@@ -166,8 +176,8 @@ def main() -> int:
                 format_time(check_time_value),
                 parse_proof_size(bench_dir),
             ]
-            if args.include_benchmark:
-                row = [str(bench_dir.relative_to(output_dir)), *row]
+            if args.no_benchmark:
+                row = row[1:]
             writer.writerow(row)
 
     print(f"Wrote summary CSV to {args.csv}")
