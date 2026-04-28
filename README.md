@@ -1,117 +1,175 @@
 CAV 2026 Artifact
 =======================================
+
 Paper title: The Cooperating Proof Calculus: Comprehensive Proofs for an SMT Solver
 
-Claimed badges: Available + Functional + Reusable
+Claimed badges: Available + Reusable
 
-Justification for the badges: [no need to justify Available -- just provide the DOI link in HotCRP]
+Justification for the badges:
 
-  * Functional: This artifact provides a way of reproducing the evaluation
-    run in Section 5 of the paper. We provide both the source code of the
-    SMT solver cvc5 (./cvc5/) and the proof checker ethos (./ethos/). The proof
-    calculus CPC, as introduced by this paper is available within cvc5's
-    code base (./cvc5/proofs/eo/cpc/Cpc.eo), which the ethos checker uses as
-    the basis for checking cvc5 proofs.
+  * Functional: The artifact reproduces the experimental workflow from
+    Section 5 of the paper. It includes the source trees of both `cvc5`
+    (`./cvc5/`) and `ethos` (`./ethos/`), build scripts, benchmark-running
+    scripts, and scripts for generating the final summary tables. The CPC
+    proof calculus used by the artifact is included in
+    `./cvc5/proofs/eo/cpc/Cpc.eo`.
 
-    - replicated: Table 1 is reproduced using the script `./run_artifact_all.sh`
-      or `./run_artifact_subset.sh`, in output `./data/M/summary_table.md`
-      (see below for details).
-    
-    - replicated: Table 2 is also reproduced using the script 
-      `./run_artifact_all.sh` or `./run_artifact_subset.sh`, in output
-      `./data/M/rule-counts.csv`.
+    - replicated:
+      * Table 1: point (1) of FULL REVIEW, produced as
+        `./data/M/summary-table.md` for a subset run and `./data/0/summary-table.md`
+        for the all-benchmarks run.
+      * Table 2: point (2) of FULL REVIEW, produced as
+        `./data/M/rule-counts.csv` for a subset run and `./data/0/rule-counts.csv`
+        for the all-benchmarks run.
 
-    - not-replicated: The verification claims in Section 4 are out of
-    scope of this artifact.
+    - not-replicated:
+      * The verification claims from Section 4 are not evaluated separately as
+        a standalone artifact task; the artifact focuses on reproducing the
+        Section 5 experimental results.
 
-  * Reusable: Both cvc5 and ethos have extensive regression tests and are
-    publicly available. cvc5's regression tests run with ethos proof checking
-    of CPC proofs (command `make regress-cpc`). cvc5 by default builds with a
-    modified BSD 3 license; ethos uses a similar modified BSD 3 license.
+  * Reusable: The artifact includes the source code of the main solver and
+    checker, local build scripts, benchmark-running scripts, and output
+    summarization scripts. The workflow can be rerun with different sample
+    sizes, timeouts, numbers of jobs, and optional proof deletion, which makes
+    the artifact usable beyond the exact paper run.
 
 Requirements:
 
-  * RAM: 128 GB (recommended)
-  * CPU cores: 16 cores (recommended)
-  * Time (smoke test): Variable; the run script can be given a number of runs.
-  * Time (full review): ???
+  * RAM: 128 GB recommended
+  * CPU cores: 16 cores recommended
+  * Time (smoke test): approximately 30-90 minutes on a 16-core machine for
+    `./run_artifact_subset.sh 10 -j 16`
+  * Time (full review): approximately 6-12 hours on a 16-core machine for
+    `./run_artifact_subset.sh 500 -j 16 --timeout 600 --delete-proofs`;
+    the complete all-benchmarks run can take multiple days
 
 external connectivity: NO
 
-  The artifact contains prebuilt binaries of cvc5 and ethos.
+  The artifact package contains prebuilt `cvc5` and `ethos` binaries. If they
+  are not available, the scripts rebuild them from the included source trees
+  without requiring network access.
 
 -------------------------------------------------------------------------------
 **                                SMOKE TEST                                 **
 -------------------------------------------------------------------------------
 
-Download the artifact package on the virtual machine into the $HOME directory
-and run the following:
+Download the artifact package on the virtual machine into the `$HOME`
+directory, extract it, and run the following from the artifact root:
 
-  `cd artifact/`
-  `./run_artifact_subset.sh 10 -j N`
-  
-where N is the number of cores to use. The value of 10 can be varied, we
-recommend starting with 10 in the smoke test.
+  `./run_artifact_subset.sh 10 -j 16`
 
-The artifact has 153,188 benchmarks from SMT-LIB in the `./benchmarks/`
-subdirectory, which are unsat benchmarks taken from all SMT-LIB logics (apart
-from floating point logics) that a reference version of cvc5 solved within a 60
-second timeout.
+This command samples 10 benchmarks from each of the six benchmark categories
+(`QF+UF`, `QF+Arith`, `QF+BV`, `QF+Str`, `Q+UF`, `Q-UF`), for 60 benchmarks in
+total.
 
-The script `./run_artifact_subset.sh M -j N` will perform the following:
-1. Randomly choose M benchmarks from each category in Table 1 (QF+UF, QF+Arith,
-   QF+BV, QF+Str, Q+UF, Q-UF).
-2. For each of these benchmarks:
-   a. Solve the benchmark with cvc5,
-   b. Solve the benchmark with cvc5 and internal proof checking,
-   c. Solve the benchmark with cvc5 and print the proof to file,
-   d. Check the proof generated in step c with ethos,
-   e. Run cvc5 with internal proof checking and statistics enabled.
-   Each of these raw outputs is stored in the output directory `./output/M/`,
-   along with timing information.
-3. We parse the results of the raw output into a CSV, stored in 
-   `./data/M/
+For each benchmark, the workflow runs:
 
-Note that some benchmarks may timeout (roughly 0.6 percent of benchmarks on
-step 2b and roughly 1.1 percent of benchmarks on step 2c,d). Expect to see
-some timeouts, especially in logics where cvc5 is unstable such as QF_NIA
-and QF_BV.
+  * `cvc5` with base options
+  * `cvc5` with proof checking
+  * `cvc5` with proof dumping
+  * `ethos` on the dumped proof
+  * `cvc5` with proof checking and internal statistics
 
-To keep the evaluation brief, `./run_artifact_subset.sh` uses a timeout of 60
-seconds by default, but a 600 second timeout was used in the paper
-for steps 2b and 2c,d.
+The base cvc5 options are:
 
-The script will report its progress and report its data in the end:
-- `./data/M/summary_table.md` which contains a markdown version of Table 1
-from the paper.
--  `./data/M/rule-counts.csv` which contains a CSV of rules used in proofs
-in the previous run, which should be similar to Table 2 from the Appendix.
-   
-*** A further note about timeouts and reproducibility:
+  `--enum-inst --safe-mode=safe`
 
-Note that the 153,188 benchmarks coincide with the same benchmarks considered
-in the paper. The selection criteria was to pick all benchmarks that cvc5
-could solve within a 60 second timeout on the machinery mentioned in the paper.
-Since cvc5 can vary slightly based on the platform, it may be possible that
-the results vary in this artifact, which is why the results may not reproduce
-exactly, and e.g. the cvc5 solve column may contain timeouts.
+The default per-benchmark timeout is 60 seconds.
 
-Running `./run_artifact_subset.sh -h` additionally shows helpful outputs for
-the evaluation. In particular, for large runs, we recommend using
-`--delete-proofs` to ensure the raw output does not cause memory issues.
+Raw outputs are written to:
+
+  `./output/10/`
+
+Summaries are written to:
+
+  * `./data/10/summary.csv`
+  * `./data/10/rule-counts.csv`
+  * `./data/10/summary-table.md`
+
+The scripts print progress as they execute benchmarks.
+
+(1) To check that Table 1 generation works, open:
+
+  `./data/10/summary-table.md`
+
+The file should contain a Markdown table with one row for each of the six
+benchmark categories and one final `Overall` row. Concrete times and timeout
+counts may vary across machines, but the file should be well-formed and should
+summarize solve, proof, check, ratio, and proof-size information.
+
+(2) To check that Table 2 generation works, open:
+
+  `./data/10/rule-counts.csv`
+
+The file should contain the header:
+
+  `rule,count`
+
+and then a list of proof rules sorted by descending frequency.
+
+For completeness, the raw outputs for the smoke test are stored under
+`./output/10/`. Each benchmark directory contains:
+
+  * `cvc5-solve.txt`
+  * `cvc5-solve-proof.txt`
+  * `cvc5-proof-gen.txt` unless `--delete-proofs` is used
+  * `cvc5-solve-proofs-stats.txt`
+  * `ethos-check.txt`
+
+Note that some timeouts are expected, especially on proof-enabled runs and in
+less stable logics such as `QF_NIA` and `QF_BV`. This is normal.
 
 -------------------------------------------------------------------------------
 **                               FULL REVIEW                                 **
 -------------------------------------------------------------------------------
 
-A full review should run a larger subset of the above script,
-we recommend:
+Assuming the smoke test passed, we recommend the following representative run:
 
-  `cd artifact/`
-  `./run_artifact_subset.sh 500 -j N`
+  `./run_artifact_subset.sh 500 -j 16 --timeout 600 --delete-proofs`
 
-which will run 500 benchmarks per category.
+This runs 500 benchmarks per category and is intended to reproduce the same
+overall trends as the paper while remaining much cheaper than the full
+all-benchmarks run.
 
-Alternatively, for a complete run of the experiments, the script
-`./run_artifact_all.sh -j N` be used. However, this will take quite a long
-time to complete on a single machine.
+The outputs will be:
+
+  * raw benchmark outputs in `./output/500/`
+  * benchmark summary CSV in `./data/500/summary.csv`
+  * proof-rule summary CSV in `./data/500/rule-counts.csv`
+  * Markdown summary table in `./data/500/summary-table.md`
+
+In the following outputs, exact values may differ across machines, but the
+overall trends should stay similar.
+
+(1) To obtain the results corresponding to Table 1, inspect:
+
+  `./data/500/summary-table.md`
+
+This file is the artifact’s reproduction of the category-wise summary table
+from the paper.
+
+(2) To obtain the results corresponding to Table 2, inspect:
+
+  `./data/500/rule-counts.csv`
+
+This file aggregates proof-rule counts across all benchmarks in the run and is
+the artifact’s reproduction of the proof-rule frequency table from the paper.
+
+For a complete run of all benchmarks in the artifact, use:
+
+  `./run_artifact_all_benchmarks.sh`
+
+This script takes no arguments. It internally runs all benchmarks with a
+600-second timeout and deletes dumped proofs after the Ethos check to keep disk
+usage manageable. The outputs of this complete run are written to:
+
+  * `./output/0/`
+  * `./data/0/summary.csv`
+  * `./data/0/rule-counts.csv`
+  * `./data/0/summary-table.md`
+
+Additional command-line options are available via:
+
+  * `./run_artifact_subset.sh --help`
+  * `./run_artifact_all.sh --help`
+  * `./scripts/run_artifact_subset.py --help`
