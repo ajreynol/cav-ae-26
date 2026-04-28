@@ -19,6 +19,16 @@ PROOF_SIZE_RE = re.compile(
     r"^(?:finalProof::totalRuleCount|finalProofRuleCount)\s*=\s*(\d+)\s*$",
     re.MULTILINE,
 )
+ARITH_MARKERS = (
+    "LIA",
+    "NIA",
+    "LRA",
+    "NRA",
+    "IDL",
+    "RDL",
+    "LIRA",
+    "NIRA",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,6 +132,31 @@ def iter_benchmark_dirs(output_dir: Path) -> list[Path]:
     return bench_dirs
 
 
+def has_arith_theory(logic: str) -> bool:
+    return any(marker in logic for marker in ARITH_MARKERS)
+
+
+def has_string_theory(logic: str) -> bool:
+    return "S" in logic and "SET" not in logic
+
+
+def classify_benchmark_category(benchmark_rel: Path) -> str:
+    logic = benchmark_rel.parts[0] if benchmark_rel.parts else ""
+    if logic.startswith("QF_"):
+        logic = logic[3:]
+        if "BV" in logic:
+            return "QF+BV"
+        if has_string_theory(logic):
+            return "QF+Str"
+        if has_arith_theory(logic):
+            return "QF+Arith"
+        return "QF+UF"
+
+    if logic.startswith("A") or "UF" in logic or "DT" in logic:
+        return "Q+UF"
+    return "Q-UF"
+
+
 def main() -> int:
     args = parse_args()
     output_dir = args.output_dir.resolve()
@@ -138,6 +173,7 @@ def main() -> int:
 
     headers = [
         "benchmark",
+        "benchmark-category",
         "solve-status",
         "solve-time",
         "proof-status",
@@ -154,6 +190,7 @@ def main() -> int:
         writer.writerow(headers)
 
         for bench_dir in bench_dirs:
+            benchmark_rel = bench_dir.relative_to(output_dir)
             solve_status, solve_time = parse_cvc5_status(bench_dir / "cvc5-solve.txt")
             proof_status, proof_time = parse_cvc5_status(bench_dir / "cvc5-solve-proof.txt")
             proof_gen_status, proof_gen_time = parse_cvc5_status(bench_dir / "cvc5-proof-gen.txt")
@@ -167,7 +204,8 @@ def main() -> int:
                 check_time_value = (proof_gen_time or 0.0) + (ethos_time or 0.0)
 
             row = [
-                str(bench_dir.relative_to(output_dir)),
+                str(benchmark_rel),
+                classify_benchmark_category(benchmark_rel),
                 solve_status,
                 format_time(solve_time),
                 proof_status,
