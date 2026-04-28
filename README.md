@@ -37,11 +37,12 @@ Requirements:
 
   * RAM: 128 GB recommended
   * CPU cores: 16 cores recommended
-  * Time (smoke test): approximately 30-90 minutes on a 16-core machine for
+  * Time (smoke test): approximately 10 minutes on a 16-core machine for
     `./run_artifact_subset.sh 10 -j 16`
   * Time (full review): approximately 6-12 hours on a 16-core machine for
-    `./run_artifact_subset.sh 500 -j 16 --timeout 600 --delete-proofs`;
-    the complete all-benchmarks run can take multiple days
+    `./run_artifact_subset.sh 200 -j 16 --timeout 600 --delete-proofs`;
+    Disclaimer: this is still incomplete with respect to the results in the
+    paper. A fully complete run over all benchmarks would take multiple days.
 
 external connectivity: NO
 
@@ -125,32 +126,32 @@ less stable logics such as `QF_NIA` and `QF_BV`. This is normal.
 
 Assuming the smoke test passed, we recommend the following representative run:
 
-  `./run_artifact_subset.sh 500 -j 16 --timeout 600 --delete-proofs`
+  `./run_artifact_subset.sh 200 -j 16 --timeout 600 --delete-proofs`
 
-This runs 500 benchmarks per category and is intended to reproduce the same
+This runs 200 benchmarks per category and is intended to reproduce the same
 overall trends as the paper while remaining much cheaper than the full
 all-benchmarks run.
 
 The outputs will be:
 
-  * raw benchmark outputs in `./output/500/`
-  * benchmark summary CSV in `./data/500/summary.csv`
-  * proof-rule summary CSV in `./data/500/rule-counts.csv`
-  * Markdown summary table in `./data/500/summary-table.md`
+  * raw benchmark outputs in `./output/200/`
+  * benchmark summary CSV in `./data/200/summary.csv`
+  * proof-rule summary CSV in `./data/200/rule-counts.csv`
+  * Markdown summary table in `./data/200/summary-table.md`
 
 In the following outputs, exact values may differ across machines, but the
 overall trends should stay similar.
 
 (1) To obtain the results corresponding to Table 1, inspect:
 
-  `./data/500/summary-table.md`
+  `./data/200/summary-table.md`
 
 This file is the artifact’s reproduction of the category-wise summary table
 from the paper.
 
 (2) To obtain the results corresponding to Table 2, inspect:
 
-  `./data/500/rule-counts.csv`
+  `./data/200/rule-counts.csv`
 
 This file aggregates proof-rule counts across all benchmarks in the run and is
 the artifact’s reproduction of the proof-rule frequency table from the paper.
