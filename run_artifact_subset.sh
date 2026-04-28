@@ -13,10 +13,10 @@ usage() {
 Usage: ./run_artifact_subset.sh N [options]
 
 Run the full artifact workflow:
-1. run_artifact_subset.py
-2. summarize_artifact_output.py
-3. summarize_rule_counts.py
-4. generate_artifact_table.py
+1. scripts/run_artifact_subset.py
+2. scripts/summarize_artifact_output.py
+3. scripts/summarize_rule_counts.py
+4. scripts/generate_artifact_table.py
 
 Arguments:
   N                           Number of benchmarks to sample per category.
@@ -156,13 +156,13 @@ if ! python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > 0 else 1)' "${ti
 fi
 
 output_dir="$(resolve_path "${output_dir}")"
-data_dir="$(resolve_path "${DEFAULT_DATA_DIR}")"
+data_dir="$(resolve_path "${DEFAULT_DATA_DIR}")/${sample_size}"
 summary_csv="${data_dir}/summary.csv"
 rule_counts_csv="${data_dir}/rule-counts.csv"
 table_markdown="${data_dir}/summary-table.md"
 
 run_subset_cmd=(
-  "${REPO_ROOT}/run_artifact_subset.py"
+  "${REPO_ROOT}/scripts/run_artifact_subset.py"
   "${sample_size}"
   "-j" "${jobs}"
   "--output-dir" "${output_dir}"
@@ -186,19 +186,19 @@ if [[ "${delete_proofs}" == "true" ]]; then
 fi
 
 summarize_output_cmd=(
-  "${REPO_ROOT}/summarize_artifact_output.py"
+  "${REPO_ROOT}/scripts/summarize_artifact_output.py"
   "--output-dir" "${output_dir}"
   "--csv" "${summary_csv}"
 )
 
 summarize_rules_cmd=(
-  "${REPO_ROOT}/summarize_rule_counts.py"
+  "${REPO_ROOT}/scripts/summarize_rule_counts.py"
   "--output-dir" "${output_dir}"
   "--csv" "${rule_counts_csv}"
 )
 
 generate_table_cmd=(
-  "${REPO_ROOT}/generate_artifact_table.py"
+  "${REPO_ROOT}/scripts/generate_artifact_table.py"
   "--csv" "${summary_csv}"
   "--markdown" "${table_markdown}"
 )
