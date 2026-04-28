@@ -14,7 +14,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
-DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "rule-counts.csv"
 STAT_BLOCK_RE = re.compile(
     r"(?P<name>finalProof::(?:dslRuleCount|ruleCount|theoryRewriteRuleCount))"
     r"\s*=\s*\{(?P<body>.*?)\}",
@@ -41,14 +40,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv",
         type=Path,
-        default=DEFAULT_CSV_PATH,
-        help="Destination CSV path. Defaults to ./data/rule-counts.csv.",
+        default=None,
+        help="Destination CSV path. Defaults to ./data/<output-subdir>/rule-counts.csv when scanning under ./output.",
     )
     return parser.parse_args()
 
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def default_csv_path(output_dir: Path) -> Path:
+    try:
+        rel = output_dir.relative_to(DEFAULT_OUTPUT_DIR.resolve())
+    except ValueError:
+        return DEFAULT_DATA_DIR / "rule-counts.csv"
+    if rel == Path("."):
+        return DEFAULT_DATA_DIR / "rule-counts.csv"
+    return DEFAULT_DATA_DIR / rel / "rule-counts.csv"
 
 
 def iter_stats_files(output_dir: Path) -> list[Path]:
@@ -84,6 +93,8 @@ def main() -> int:
         print(f"Output directory not found: {output_dir}", file=sys.stderr)
         return 2
 
+    csv_path = args.csv.resolve() if args.csv is not None else default_csv_path(output_dir)
+
     stats_files = iter_stats_files(output_dir)
     if not stats_files:
         print(f"No stats files found under {output_dir}", file=sys.stderr)
@@ -106,8 +117,8 @@ def main() -> int:
         )
         return 2
 
-    write_csv(args.csv.resolve(), total_counts)
-    print(f"Wrote rule-count CSV to {args.csv.resolve()}")
+    write_csv(csv_path, total_counts)
+    print(f"Wrote rule-count CSV to {csv_path}")
 
     if missing_rule_count_files:
         print(

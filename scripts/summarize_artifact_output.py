@@ -13,7 +13,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output"
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
-DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "summary.csv"
 TIMING_MARKER = "\n[run_artifact_subset] elapsed_seconds="
 TIMING_RE = re.compile(
     r"\[run_artifact_subset\] elapsed_seconds=([0-9]+(?:\.[0-9]+)?)"
@@ -55,8 +54,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv",
         type=Path,
-        default=DEFAULT_CSV_PATH,
-        help="Destination CSV path. Defaults to ./data/summary.csv.",
+        default=None,
+        help="Destination CSV path. Defaults to ./data/<output-subdir>/summary.csv when scanning under ./output.",
     )
     parser.add_argument(
         "--no-benchmark",
@@ -68,6 +67,16 @@ def parse_args() -> argparse.Namespace:
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def default_csv_path(output_dir: Path) -> Path:
+    try:
+        rel = output_dir.relative_to(DEFAULT_OUTPUT_DIR.resolve())
+    except ValueError:
+        return DEFAULT_DATA_DIR / "summary.csv"
+    if rel == Path("."):
+        return DEFAULT_DATA_DIR / "summary.csv"
+    return DEFAULT_DATA_DIR / rel / "summary.csv"
 
 
 def split_body_and_time(text: str) -> tuple[str, float | None, int | None, bool | None]:
@@ -204,12 +213,14 @@ def main() -> int:
         print(f"Output directory not found: {output_dir}", file=sys.stderr)
         return 2
 
+    csv_path = args.csv.resolve() if args.csv is not None else default_csv_path(output_dir)
+
     bench_dirs = iter_benchmark_dirs(output_dir)
     if not bench_dirs:
         print(f"No benchmark runs found under {output_dir}", file=sys.stderr)
         return 2
 
-    args.csv.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     headers = [
         "benchmark",
@@ -225,7 +236,7 @@ def main() -> int:
     if args.no_benchmark:
         headers = headers[1:]
 
-    with args.csv.open("w", encoding="utf-8", newline="") as handle:
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(headers)
 
@@ -258,7 +269,7 @@ def main() -> int:
                 row = row[1:]
             writer.writerow(row)
 
-    print(f"Wrote summary CSV to {args.csv}")
+    print(f"Wrote summary CSV to {csv_path}")
     return 0
 
 

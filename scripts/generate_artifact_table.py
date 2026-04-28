@@ -12,8 +12,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
-DEFAULT_CSV_PATH = DEFAULT_DATA_DIR / "summary.csv"
-DEFAULT_MARKDOWN_PATH = DEFAULT_DATA_DIR / "summary-table.md"
 CATEGORY_ORDER = (
     "QF+UF",
     "QF+Arith",
@@ -58,14 +56,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv",
         type=Path,
-        default=DEFAULT_CSV_PATH,
+        default=None,
         help="Input CSV path. Defaults to ./data/summary.csv.",
     )
     parser.add_argument(
         "--markdown",
         type=Path,
-        default=DEFAULT_MARKDOWN_PATH,
-        help="Output Markdown file path. Defaults to ./data/summary-table.md.",
+        default=None,
+        help="Output Markdown file path. Defaults next to the input CSV as summary-table.md.",
     )
     parser.add_argument(
         "--title",
@@ -87,6 +85,14 @@ def parse_int(value: str) -> int | None:
     if not stripped:
         return None
     return int(stripped)
+
+
+def default_csv_path() -> Path:
+    return DEFAULT_DATA_DIR / "summary.csv"
+
+
+def default_markdown_path(csv_path: Path) -> Path:
+    return csv_path.with_name("summary-table.md")
 
 
 def require_columns(fieldnames: list[str] | None, required: list[str]) -> None:
@@ -264,8 +270,12 @@ def render_table_line(row: AggregateRow, overall: bool = False) -> str:
 
 def main() -> int:
     args = parse_args()
-    csv_path = args.csv.resolve()
-    markdown_path = args.markdown.resolve()
+    csv_path = args.csv.resolve() if args.csv is not None else default_csv_path().resolve()
+    markdown_path = (
+        args.markdown.resolve()
+        if args.markdown is not None
+        else default_markdown_path(csv_path).resolve()
+    )
 
     if not csv_path.is_file():
         print(f"CSV file not found: {csv_path}", file=sys.stderr)
