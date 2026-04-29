@@ -8,11 +8,11 @@
 # builds both tools, and runs the smoke test by default.
 #
 # Build:
-#   docker build -t cpc-cav26:1.0 .
+#   docker build -t cpc-cav26:v1 .
 # Interactive shell (default CMD):
-#   docker run --rm -it cpc-cav26:1.0
+#   docker run --rm -it cpc-cav26:v1
 # Run the smoke test directly:
-#   docker run --rm cpc-cav26:1.0 ./run_artifact_subset.sh 10 -j 16
+#   docker run --rm cpc-cav26:v1 ./run_artifact_subset.sh 10 -j 16
 
 FROM ubuntu:24.04
 

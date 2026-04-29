@@ -46,9 +46,11 @@ Requirements:
 
 external connectivity: NO
 
-  The artifact package contains prebuilt `cvc5` and `ethos` binaries. If they
-  are not available, the scripts rebuild them from the included source trees
-  without requiring network access.
+  The artifact ships prebuilt `cvc5` and `ethos` binaries, so the smoke
+  test and the full review run entirely offline. Rebuilding the binaries
+  from the included source trees via the `build_*.sh` scripts is optional
+  and does require network access, since cvc5's `--auto-download` step
+  fetches its build-time dependencies from upstream.
 
 -------------------------------------------------------------------------------
 **                              DOCKER IMAGE                                 **
