@@ -51,11 +51,44 @@ external connectivity: NO
   without requiring network access.
 
 -------------------------------------------------------------------------------
+**                              DOCKER IMAGE                                 **
+-------------------------------------------------------------------------------
+
+The artifact ships as a Docker image (`cpc-cav26:v1`) preloaded with the
+benchmarks, the artifact scripts, and prebuilt `cvc5` and `ethos` binaries.
+The image is based on Ubuntu 24.04 LTS and runs as the unprivileged user
+`user` (passwordless `sudo` available if needed). The artifact root inside
+the image is `/home/user/artifact`.
+
+Loading the image (reviewers)
+-----------------------------
+
+Download `cpc-cav26-v1.tar.gz` from the artifact's Zenodo record and load
+it into Docker:
+
+  `docker load < cpc-cav26-v1.tar.gz`
+
+This produces a local image tagged `cpc-cav26:v1`.
+
+Starting an interactive container
+---------------------------------
+
+The default command is `bash`, so reviewers can explore the artifact and
+invoke any script manually:
+
+  `docker run --rm -it cpc-cav26:v1`
+
+Inside the container, the working directory is `/home/user/artifact`. From
+there, all the scripts described in the SMOKE TEST and FULL REVIEW sections
+below work exactly as documented (the binaries are already built; no rebuild
+is required).
+
+-------------------------------------------------------------------------------
 **                                SMOKE TEST                                 **
 -------------------------------------------------------------------------------
 
-Download the artifact package on the virtual machine into the `$HOME`
-directory, extract it, and run the following from the artifact root:
+Inside the container (`docker run --rm -it cpc-cav26:v1`), run the following from
+the artifact root:
 
   `./run_artifact_subset.sh 10 -j 16`
 

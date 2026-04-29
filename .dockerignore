@@ -1,0 +1,18 @@
+# Exclude the locally-checked-out cvc5/ethos sources: the Dockerfile clones
+# the latest versions from upstream rather than copying them.
+cvc5/
+ethos/
+
+# Exclude the materials directory: per the task spec, it must not be copied
+# into the image.
+material/
+
+# Build/run artifacts that should never end up in the image.
+output/
+data/
+
+# VCS, editor, and Docker metadata.
+.git/
+.gitignore
+.dockerignore
+Dockerfile
